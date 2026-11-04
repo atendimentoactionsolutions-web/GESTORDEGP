@@ -1,0 +1,17 @@
+{
+  "name": "gestor-de-grupos-whatsapp",
+  "version": "1.0.0",
+  "description": "Gestor de Grupos do WhatsApp com classificação por DDD, identificação de maioria (SP Capital 11 vs outros) e saída facilitada em 1 clique",
+  "main": "bridge.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node bridge.mjs"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "http-node": "^1.2.0",
+    "isomorphic-git": "^1.44.10",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4"
+  }
+}

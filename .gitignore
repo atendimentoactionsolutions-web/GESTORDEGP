@@ -1,0 +1,20 @@
+# Runtime e dependências
+.runtime/
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+
+# Credenciais e sessões do WhatsApp (SEGURANÇA: NUNCA SUBIR PARA O GITHUB)
+data/wa_auth/
+wa_auth/
+*auth_info*
+*.tmp
+
+# Arquivos do sistema operacional
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
