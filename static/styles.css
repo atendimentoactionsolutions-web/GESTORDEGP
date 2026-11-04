@@ -24,12 +24,23 @@
   --warning-border: #fde68a;
 }
 
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   background-color: var(--bg-page);
   color: var(--text-main);
   font-family: -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "Inter", "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Custom Scrollbars */
@@ -236,8 +247,10 @@ input[type="checkbox"] {
   position: fixed;
   bottom: 1.5rem;
   left: 50%;
-  transform: translateX(-50%) translateY(120%);
+  transform: translateX(-50%) translateY(140%);
   z-index: 40;
+  width: calc(100% - 2rem);
+  max-width: 480px;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -259,4 +272,89 @@ input[type="checkbox"] {
 
 .modal-animate {
   animation: modalFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Scrollbar Utility para Mobile Touch */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ==========================================================
+   REGRAS RESPONSIVAS MOBILE (iOS & ANDROID)
+   ========================================================== */
+
+@media (max-width: 640px) {
+  /* Cards & Bordas Compactas no Mobile */
+  .clean-card {
+    border-radius: 0.875rem;
+  }
+
+  /* Abas com touch scroll suave e tamanho ergonômico */
+  #tabsBar {
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+
+  .tab-btn {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.75rem;
+    gap: 0.35rem;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+  }
+
+  .tab-counter {
+    font-size: 0.65rem;
+    padding: 0.05rem 0.35rem;
+  }
+
+  /* Form Selects: evita que opções longas estourem a tela */
+  select {
+    max-width: 100%;
+    min-width: 0;
+    font-size: 0.75rem;
+  }
+
+  /* Badges de Grupos no Mobile */
+  .badge-clean {
+    font-size: 0.68rem;
+    padding: 0.2rem 0.45rem;
+    gap: 0.25rem;
+  }
+
+  /* Botão Sair com Touch Target confortável */
+  .btn-leave {
+    min-height: 34px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  /* Barra de ações flutuante com margem segura */
+  .bulk-bar {
+    bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+    width: calc(100% - 1.5rem);
+  }
+
+  /* Modais no Mobile: tela quase cheia e centralizados */
+  .modal-animate {
+    max-width: calc(100vw - 1.5rem) !important;
+    padding: 1.25rem !important;
+    margin: auto;
+  }
+
+  /* Previne que títulos muito longos empurrem o layout */
+  .group-card h3 {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Header compacta no mobile */
+  header .max-w-7xl {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
 }

@@ -695,10 +695,10 @@ function renderGroupCard(g) {
   }
 
   return `
-    <div class="clean-card group-card p-4 flex flex-col justify-between gap-3.5 ${isSelected ? 'ring-2 ring-emerald-500 bg-emerald-50/20' : ''}">
+    <div class="clean-card group-card p-3.5 sm:p-4 flex flex-col justify-between gap-3 sm:gap-3.5 ${isSelected ? 'ring-2 ring-emerald-500 bg-emerald-50/20' : ''}">
       <div>
         <!-- Cabeçalho do Card: Checkbox + Avatar + Título -->
-        <div class="flex items-start gap-3">
+        <div class="flex items-start gap-2.5 sm:gap-3">
           <input type="checkbox" ${isSelected ? "checked" : ""} 
                  onchange="toggleGroupSelect('${g.id}')" 
                  class="mt-1">
@@ -708,16 +708,16 @@ function renderGroupCard(g) {
           </div>
 
           <div class="flex-1 min-w-0">
-            <h3 class="text-xs font-bold text-slate-900 truncate leading-snug" title="${escapeHtml(subject)}">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-900 truncate leading-snug" title="${escapeHtml(subject)}">
               ${escapeHtml(subject)}
             </h3>
             ${g.is_community ? `
-              <p class="text-[11px] font-semibold mt-0.5 text-purple-700 inline-flex items-center gap-1">
+              <p class="text-[10px] sm:text-[11px] font-semibold mt-0.5 text-purple-700 inline-flex items-center gap-1">
                 <i class="fa-solid fa-sitemap text-[10px]"></i>
-                <span>Comunidade (Raiz de subgrupos)</span>
+                <span>Comunidade (Raiz)</span>
               </p>
             ` : `
-              <p class="text-[11px] text-slate-500 font-medium mt-0.5">
+              <p class="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5">
                 ${g.total_participants} participantes
               </p>
             `}
@@ -725,7 +725,7 @@ function renderGroupCard(g) {
         </div>
 
         <!-- Badges Informativas -->
-        <div class="flex flex-wrap items-center gap-1.5 mt-3">
+        <div class="flex flex-wrap items-center gap-1 sm:gap-1.5 mt-2.5 sm:mt-3">
           ${communityBadge}
           ${themeBadge}
           ${viewBadge}
@@ -737,7 +737,7 @@ function renderGroupCard(g) {
       <!-- Rodapé do Card: Ações -->
       <div class="flex items-center justify-between pt-2.5 border-t border-slate-100">
         <button onclick="showGroupDetail('${g.id}')" 
-                class="text-[11px] font-semibold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1">
+                class="text-[11px] font-semibold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1 py-1 px-1.5 rounded-lg hover:bg-slate-100">
           <i class="fa-solid fa-chart-pie text-slate-400"></i>
           <span>Detalhes</span>
         </button>
@@ -877,7 +877,7 @@ function renderRadarCard(r) {
   const badgeCategory = categoryLabels[r.category] || "💼 Vendas Locais";
 
   return `
-    <div class="clean-card group-card p-4 flex flex-col justify-between gap-3 border-sky-100 hover:border-sky-300">
+    <div class="clean-card group-card p-3.5 sm:p-4 flex flex-col justify-between gap-3 border-sky-100 hover:border-sky-300">
       <div>
         <div class="flex items-start justify-between gap-2 mb-2">
           <div class="flex items-center gap-2.5 min-w-0">
@@ -885,7 +885,7 @@ function renderRadarCard(r) {
               <i class="fa-solid fa-satellite-dish"></i>
             </div>
             <div class="min-w-0">
-              <h3 class="text-xs font-bold text-slate-900 truncate" title="${escapeHtml(r.subject)}">
+              <h3 class="text-xs sm:text-sm font-bold text-slate-900 truncate" title="${escapeHtml(r.subject)}">
                 ${escapeHtml(r.subject)}
               </h3>
               <p class="text-[10px] text-slate-500 font-medium">
@@ -895,13 +895,13 @@ function renderRadarCard(r) {
           </div>
 
           <button onclick="removeRadarGroup('${r.code}')" title="Descartar este link" 
-                  class="text-slate-400 hover:text-rose-600 text-xs p-1 transition-colors">
+                  class="text-slate-400 hover:text-rose-600 text-xs p-1.5 transition-colors">
             <i class="fa-solid fa-trash-can"></i>
           </button>
         </div>
 
         <!-- Badges Identificadores -->
-        <div class="flex flex-wrap items-center gap-1.5 my-2">
+        <div class="flex flex-wrap items-center gap-1 sm:gap-1.5 my-2">
           <span class="badge-clean badge-radar font-bold">
             ${badgeCategory}
           </span>
@@ -924,20 +924,20 @@ function renderRadarCard(r) {
       <!-- Ações do Radar -->
       <div class="flex items-center justify-between pt-2.5 border-t border-slate-100 gap-2">
         <a href="${r.link}" target="_blank" rel="noopener noreferrer" 
-           class="text-[11px] font-semibold text-sky-700 hover:text-sky-900 inline-flex items-center gap-1">
+           class="text-[11px] font-semibold text-sky-700 hover:text-sky-900 inline-flex items-center gap-1 py-1">
           <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
           <span>Ver Convite</span>
         </a>
 
         ${r.joinApprovalMode ? `
           <button onclick="joinRadarGroup('${r.code}', '${escapeAttr(r.subject)}', true)" 
-                  class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95" title="Grupo privado: Envia o link para pedido de entrada">
+                  class="px-3 sm:px-3.5 py-2 sm:py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95" title="Grupo privado: Envia o link para pedido de entrada">
             <i class="fa-solid fa-paper-plane text-[10px]"></i>
             <span>Pedir para Entrar</span>
           </button>
         ` : `
           <button onclick="joinRadarGroup('${r.code}', '${escapeAttr(r.subject)}', false)" 
-                  class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95">
+                  class="px-3 sm:px-3.5 py-2 sm:py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95">
             <i class="fa-solid fa-right-to-bracket text-xs"></i>
             <span>Entrar no Grupo</span>
           </button>

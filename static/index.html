@@ -24,19 +24,19 @@
 
   <!-- HEADER SUPERIOR LIMPO -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 py-3 flex items-center justify-between gap-4">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
       
       <!-- Logo & Título -->
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white text-xl shadow-sm">
+      <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white text-lg sm:text-xl shadow-sm flex-shrink-0">
           <i class="fa-brands fa-whatsapp"></i>
         </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900">
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <h1 class="text-sm sm:text-lg font-bold tracking-tight text-slate-900 truncate">
               Gestor de Grupos
             </h1>
-            <span id="headerTotalBadge" class="text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span id="headerTotalBadge" class="text-[10px] sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
               Carregando...
             </span>
           </div>
@@ -45,36 +45,37 @@
       </div>
 
       <!-- Status, Conexão e Ações Rápidas -->
-      <div class="flex items-center gap-2.5 sm:gap-3">
+      <div class="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
         
         <!-- Status de Conexão -->
-        <div id="connectionPill" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
-          <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
-          <span id="statusText" class="font-semibold text-slate-700">Conectando...</span>
+        <div id="connectionPill" class="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
+          <span id="statusDot" class="w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+          <span id="statusText" class="font-semibold text-slate-700 text-[11px] sm:text-xs">Conectando...</span>
         </div>
 
         <!-- Botão QR Code (se desconectado) -->
-        <button id="btnOpenQr" onclick="openQrModal()" class="hidden items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all">
+        <button id="btnOpenQr" onclick="openQrModal()" class="hidden items-center gap-1 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all whitespace-nowrap">
           <i class="fa-solid fa-qrcode"></i>
-          <span>Ler QR Code</span>
+          <span class="hidden sm:inline">Ler QR Code</span>
+          <span class="sm:hidden">QR</span>
         </button>
 
         <!-- Botão Sincronizar Grupos -->
         <button id="btnRefresh" onclick="refreshGroups()" title="Sincronizar grupos diretamente do WhatsApp" 
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 text-xs font-semibold shadow-sm transition-all active:scale-95">
+                class="flex items-center justify-center p-2 sm:px-3 sm:py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 text-xs font-semibold shadow-sm transition-all active:scale-95">
           <i id="refreshIcon" class="fa-solid fa-arrows-rotate text-xs text-slate-500"></i>
-          <span class="hidden sm:inline">Sincronizar</span>
+          <span class="hidden sm:inline sm:ml-1.5">Sincronizar</span>
         </button>
 
         <!-- Botão Auditar Participantes Reais -->
         <button id="btnAudit" onclick="auditGroupParticipants()" title="Auditar todos os grupos para corrigir membros reais e evitar bugs" 
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold shadow-sm transition-all active:scale-95">
+                class="flex items-center justify-center p-2 sm:px-3 sm:py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold shadow-sm transition-all active:scale-95">
           <i id="auditIcon" class="fa-solid fa-shield-halved text-xs text-emerald-600"></i>
-          <span class="hidden sm:inline">Auditar Membros</span>
+          <span class="hidden sm:inline sm:ml-1.5">Auditar Membros</span>
         </button>
 
         <!-- Usuário Conectado & Logout -->
-        <div id="userMenu" class="hidden items-center gap-2 pl-2 border-l border-slate-200">
+        <div id="userMenu" class="hidden items-center gap-1.5 sm:gap-2 pl-1.5 sm:pl-2 border-l border-slate-200">
           <div class="text-right hidden md:block">
             <div id="userName" class="text-xs font-bold text-slate-800 leading-tight truncate max-w-[150px]">Cledson Moura</div>
             <div id="userPhone" class="text-[11px] font-mono text-emerald-600 font-semibold">+55 ...</div>
@@ -109,69 +110,69 @@
     </div>
 
     <!-- CARDS DE MÉTRICAS / KPIS RESUMO -->
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-3.5">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3.5">
       
       <!-- Total de Grupos -->
-      <div onclick="switchTab('all')" class="clean-card p-3.5 cursor-pointer hover:border-slate-300 transition-all">
-        <div class="flex items-center justify-between text-slate-500 mb-1.5">
-          <span class="text-[11px] font-semibold">Total Grupos</span>
+      <div onclick="switchTab('all')" class="clean-card p-2.5 sm:p-3.5 cursor-pointer hover:border-slate-300 transition-all">
+        <div class="flex items-center justify-between text-slate-500 mb-1">
+          <span class="text-[10px] sm:text-[11px] font-semibold">Total Grupos</span>
           <i class="fa-solid fa-users text-xs text-slate-400"></i>
         </div>
-        <div id="kpiTotalGroups" class="text-xl font-extrabold text-slate-900">0</div>
-        <div class="text-[10px] text-slate-500 mt-0.5">Sua conta ativa</div>
+        <div id="kpiTotalGroups" class="text-lg sm:text-xl font-extrabold text-slate-900">0</div>
+        <div class="text-[9px] sm:text-[10px] text-slate-500 mt-0.5 truncate">Sua conta ativa</div>
       </div>
 
       <!-- Bairros de SP -->
-      <div onclick="switchTab('bairros')" class="clean-card p-3.5 cursor-pointer border-emerald-200/80 bg-emerald-50/20 hover:border-emerald-300 transition-all">
-        <div class="flex items-center justify-between text-emerald-700 mb-1.5">
-          <span class="text-[11px] font-bold">Bairros de SP</span>
+      <div onclick="switchTab('bairros')" class="clean-card p-2.5 sm:p-3.5 cursor-pointer border-emerald-200/80 bg-emerald-50/20 hover:border-emerald-300 transition-all">
+        <div class="flex items-center justify-between text-emerald-700 mb-1">
+          <span class="text-[10px] sm:text-[11px] font-bold">Bairros de SP</span>
           <i class="fa-solid fa-city text-xs text-emerald-600"></i>
         </div>
-        <div id="kpiBairroGroups" class="text-xl font-extrabold text-emerald-700">0</div>
-        <div class="text-[10px] text-emerald-600 mt-0.5">Grupos por região/bairro</div>
+        <div id="kpiBairroGroups" class="text-lg sm:text-xl font-extrabold text-emerald-700">0</div>
+        <div class="text-[9px] sm:text-[10px] text-emerald-600 mt-0.5 truncate">Por região/bairro</div>
       </div>
 
       <!-- Desapego -->
-      <div onclick="switchTab('desapego')" class="clean-card p-3.5 cursor-pointer border-purple-200/80 bg-purple-50/20 hover:border-purple-300 transition-all">
-        <div class="flex items-center justify-between text-purple-700 mb-1.5">
-          <span class="text-[11px] font-bold">Desapego</span>
+      <div onclick="switchTab('desapego')" class="clean-card p-2.5 sm:p-3.5 cursor-pointer border-purple-200/80 bg-purple-50/20 hover:border-purple-300 transition-all">
+        <div class="flex items-center justify-between text-purple-700 mb-1">
+          <span class="text-[10px] sm:text-[11px] font-bold">Desapego</span>
           <i class="fa-solid fa-bag-shopping text-xs text-purple-600"></i>
         </div>
-        <div id="kpiDesapegoGroups" class="text-xl font-extrabold text-purple-700">0</div>
-        <div class="text-[10px] text-purple-600 mt-0.5">Bazares e usados</div>
+        <div id="kpiDesapegoGroups" class="text-lg sm:text-xl font-extrabold text-purple-700">0</div>
+        <div class="text-[9px] sm:text-[10px] text-purple-600 mt-0.5 truncate">Bazares e usados</div>
       </div>
 
       <!-- Feira do Rolo -->
-      <div onclick="switchTab('rolo')" class="clean-card p-3.5 cursor-pointer border-amber-200/80 bg-amber-50/20 hover:border-amber-300 transition-all">
-        <div class="flex items-center justify-between text-amber-700 mb-1.5">
-          <span class="text-[11px] font-bold">Feira do Rolo</span>
+      <div onclick="switchTab('rolo')" class="clean-card p-2.5 sm:p-3.5 cursor-pointer border-amber-200/80 bg-amber-50/20 hover:border-amber-300 transition-all">
+        <div class="flex items-center justify-between text-amber-700 mb-1">
+          <span class="text-[10px] sm:text-[11px] font-bold">Feira do Rolo</span>
           <i class="fa-solid fa-arrows-rotate text-xs text-amber-600"></i>
         </div>
-        <div id="kpiRoloGroups" class="text-xl font-extrabold text-amber-700">0</div>
-        <div class="text-[10px] text-amber-600 mt-0.5">Trocas e rolos SP</div>
+        <div id="kpiRoloGroups" class="text-lg sm:text-xl font-extrabold text-amber-700">0</div>
+        <div class="text-[9px] sm:text-[10px] text-amber-600 mt-0.5 truncate">Trocas e rolos SP</div>
       </div>
 
       <!-- Menor Visualização -->
-      <div onclick="switchTab('low_views')" class="clean-card p-3.5 cursor-pointer border-rose-200/80 bg-rose-50/20 hover:border-rose-300 transition-all">
-        <div class="flex items-center justify-between text-rose-600 mb-1.5">
-          <span class="text-[11px] font-bold">Menor Leitura</span>
+      <div onclick="switchTab('low_views')" class="clean-card p-2.5 sm:p-3.5 cursor-pointer border-rose-200/80 bg-rose-50/20 hover:border-rose-300 transition-all">
+        <div class="flex items-center justify-between text-rose-600 mb-1">
+          <span class="text-[10px] sm:text-[11px] font-bold">Menor Leitura</span>
           <i class="fa-solid fa-eye-slash text-xs text-rose-500"></i>
         </div>
-        <div id="kpiLowViewsGroups" class="text-xl font-extrabold text-rose-600">0</div>
-        <div class="text-[10px] text-rose-600 mt-0.5">Pouco engajamento</div>
+        <div id="kpiLowViewsGroups" class="text-lg sm:text-xl font-extrabold text-rose-600">0</div>
+        <div class="text-[9px] sm:text-[10px] text-rose-600 mt-0.5 truncate">Pouco engajamento</div>
       </div>
 
       <!-- Radar de Links -->
-      <div onclick="switchTab('radar')" class="clean-card p-3.5 cursor-pointer border-sky-300/80 bg-sky-50/30 hover:border-sky-400 transition-all">
-        <div class="flex items-center justify-between text-sky-700 mb-1.5">
-          <span class="text-[11px] font-bold flex items-center gap-1">
+      <div onclick="switchTab('radar')" class="clean-card p-2.5 sm:p-3.5 cursor-pointer border-sky-300/80 bg-sky-50/30 hover:border-sky-400 transition-all">
+        <div class="flex items-center justify-between text-sky-700 mb-1">
+          <span class="text-[10px] sm:text-[11px] font-bold flex items-center gap-1">
             <span class="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping"></span>
-            <span>Radar de Grupos</span>
+            <span>Radar Grupos</span>
           </span>
           <i class="fa-solid fa-satellite-dish text-xs text-sky-600"></i>
         </div>
-        <div id="kpiRadarCount" class="text-xl font-extrabold text-sky-700">0</div>
-        <div class="text-[10px] text-sky-600 mt-0.5">Links rastreados</div>
+        <div id="kpiRadarCount" class="text-lg sm:text-xl font-extrabold text-sky-700">0</div>
+        <div class="text-[9px] sm:text-[10px] text-sky-600 mt-0.5 truncate">Links rastreados</div>
       </div>
 
     </div>
@@ -258,8 +259,8 @@
     <div id="sectionActiveGroups" class="space-y-4">
       
       <!-- CONTROLES DE FILTRO, BUSCA E EXIBIÇÃO -->
-      <div class="clean-card p-4 space-y-3.5">
-        <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+      <div class="clean-card p-3 sm:p-4 space-y-3 sm:space-y-3.5">
+        <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 sm:gap-3">
           
           <!-- Campo de Busca -->
           <div class="relative flex-1">
@@ -272,70 +273,70 @@
             </button>
           </div>
 
-          <!-- Filtros Rápidos & Ordenação -->
-          <div class="flex flex-wrap items-center gap-2">
+          <!-- Filtros Rápidos & Ordenação (Grid 2 colunas no Mobile / Flex no Desktop) -->
+          <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full md:w-auto">
             
             <!-- Botão Rápido: Menores para os Maiores -->
             <button id="btnSortMenores" onclick="toggleSortMenores()" 
                     title="Alternar: Menores para Maiores / Maiores para Menores" 
-                    class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-all border border-emerald-200 active:scale-95 shadow-sm">
+                    class="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-all border border-emerald-200 active:scale-95 shadow-sm">
               <i id="sortMenoresIcon" class="fa-solid fa-arrow-up-short-wide text-xs text-emerald-600"></i>
               <span id="sortMenoresText">Menores → Maiores</span>
             </button>
 
             <!-- Filtro de Porte / Tamanho do Grupo -->
             <select id="filterSize" onchange="onSizeFilterChange(this.value)" 
-                    class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold focus:bg-white focus:outline-none focus:border-slate-400 transition-all">
-              <option value="all">Todos os Tamanhos</option>
-              <option value="small">🟢 Apenas Menores (1 a 20 membros)</option>
-              <option value="medium">🟡 Apenas Médios (21 a 60 membros)</option>
-              <option value="large">🔵 Apenas Grandes (61 a 256 membros)</option>
-              <option value="giant">🟣 Apenas Gigantes (Mais de 256 membros)</option>
+                    class="col-span-1 w-full px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold focus:bg-white focus:outline-none focus:border-slate-400 transition-all truncate">
+              <option value="all">Porte: Todos</option>
+              <option value="small">🟢 Menores (1-20)</option>
+              <option value="medium">🟡 Médios (21-60)</option>
+              <option value="large">🔵 Grandes (61-256)</option>
+              <option value="giant">🟣 Gigantes (+256)</option>
             </select>
 
             <!-- Filtro DDD Regional -->
             <select id="filterDdd" onchange="fetchGroups()" 
-                    class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:border-slate-400 transition-all">
-              <option value="all">Todos os DDDs</option>
-              <option value="11">DDD 11 (SP Capital / Região)</option>
-              <option value="low_sp11">Pouco SP (&lt;85% DDD 11)</option>
-              <option value="sp_interior">SP Interior (12 a 19)</option>
-              <option value="rj">Rio de Janeiro (21, 22, 24)</option>
-              <option value="mg">Minas Gerais (31 a 38)</option>
-              <option value="sul">Região Sul (41 a 55)</option>
-              <option value="nordeste">Região Nordeste (71 a 99)</option>
-              <option value="centro_oeste">Centro-Oeste (61 a 67)</option>
-              <option value="norte">Região Norte (68 a 97)</option>
+                    class="col-span-1 w-full px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:border-slate-400 transition-all truncate">
+              <option value="all">DDDs: Todos</option>
+              <option value="11">DDD 11 (SP Capital)</option>
+              <option value="low_sp11">Pouco SP (&lt;85%)</option>
+              <option value="sp_interior">SP Interior (12-19)</option>
+              <option value="rj">Rio de Janeiro (21, 24)</option>
+              <option value="mg">Minas Gerais (31-38)</option>
+              <option value="sul">Região Sul (41-55)</option>
+              <option value="nordeste">Nordeste (71-99)</option>
+              <option value="centro_oeste">Centro-Oeste (61-67)</option>
+              <option value="norte">Região Norte (68-97)</option>
             </select>
 
             <!-- Ordenação -->
             <select id="sortBy" onchange="onSortChange(this.value)" 
-                    class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:border-slate-400 transition-all">
-              <option value="members_asc">🔼 Menores para os Maiores (Poucos Membros Primeiro)</option>
-              <option value="members_desc">🔽 Maiores para os Menores (Mais Membros Primeiro)</option>
-              <option value="views_asc">👁️ Menor visualização primeiro</option>
-              <option value="sp11_asc">📉 Menor % SP primeiro</option>
-              <option value="sp11_desc">📍 Maior % SP primeiro</option>
+                    class="col-span-2 sm:col-span-1 w-full px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:border-slate-400 transition-all truncate">
+              <option value="members_asc">🔼 Menores → Maiores</option>
+              <option value="members_desc">🔽 Maiores → Menores</option>
+              <option value="views_asc">👁️ Menor visualização</option>
+              <option value="sp11_asc">📉 Menor % SP 11</option>
+              <option value="sp11_desc">📍 Maior % SP 11</option>
               <option value="name_asc">🔤 Nome (A-Z)</option>
             </select>
 
             <!-- Itens por página -->
             <select id="perPage" onchange="changePerPage(this.value)" 
-                    class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:border-slate-400 transition-all">
+                    class="col-span-1 w-full px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:border-slate-400 transition-all truncate">
               <option value="50">50 por página</option>
               <option value="100">100 por página</option>
               <option value="200">200 por página</option>
-              <option value="all">Exibir Todos (Sem limite)</option>
+              <option value="all">Exibir Todos</option>
             </select>
 
             <!-- Alternar Modo Grade / Tabela -->
-            <div class="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200">
+            <div class="col-span-1 flex items-center justify-center sm:justify-start rounded-xl bg-slate-100 p-1 border border-slate-200">
               <button id="viewGridBtn" onclick="setViewMode('grid')" title="Visualização em Grade" 
-                      class="p-1.5 rounded-lg text-slate-700 bg-white shadow-sm text-xs transition-all">
+                      class="flex-1 sm:flex-initial p-1.5 rounded-lg text-slate-700 bg-white shadow-sm text-xs transition-all text-center">
                 <i class="fa-solid fa-grip"></i>
               </button>
               <button id="viewTableBtn" onclick="setViewMode('table')" title="Visualização em Tabela" 
-                      class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 text-xs transition-all">
+                      class="flex-1 sm:flex-initial p-1.5 rounded-lg text-slate-500 hover:text-slate-800 text-xs transition-all text-center">
                 <i class="fa-solid fa-list"></i>
               </button>
             </div>
@@ -344,19 +345,19 @@
         </div>
 
         <!-- Barra de Seleção Rápida e Contadores Informativos -->
-        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs text-slate-600">
-          <div class="flex items-center gap-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100 text-xs text-slate-600">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
             <label class="flex items-center gap-2 cursor-pointer select-none font-medium">
               <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAllPage(this.checked)">
-              <span>Selecionar todos desta página (<span id="currentVisibleCount">0</span>)</span>
+              <span>Selecionar todos da página (<span id="currentVisibleCount">0</span>)</span>
             </label>
-            <span class="text-slate-300">|</span>
-            <button onclick="selectAllMatchingGroups()" class="text-emerald-700 hover:text-emerald-800 font-semibold underline text-xs">
+            <span class="hidden sm:inline text-slate-300">|</span>
+            <button onclick="selectAllMatchingGroups()" class="text-left text-emerald-700 hover:text-emerald-800 font-semibold underline text-xs">
               Selecionar todos os <span id="totalMatchingCount">0</span> grupos da aba
             </button>
           </div>
 
-          <div class="flex items-center gap-2 text-slate-500">
+          <div class="flex items-center gap-2 text-slate-500 text-[11px] sm:text-xs">
             <span>Mostrando <strong id="rangeCountText" class="text-slate-800">0</strong> de <strong id="totalCountText" class="text-slate-800">0</strong> grupos</span>
           </div>
         </div>
@@ -425,13 +426,13 @@
     <div id="sectionRadar" class="space-y-4 hidden">
       
       <!-- Banner Informativo do Radar -->
-      <div class="clean-card p-5 bg-gradient-to-r from-sky-50 via-white to-sky-50/50 border-sky-200">
-        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div class="clean-card p-4 sm:p-5 bg-gradient-to-r from-sky-50 via-white to-sky-50/50 border-sky-200">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4">
           <div>
             <div class="flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse"></span>
-              <h2 class="text-base font-bold text-slate-900">Radar de Novos Grupos de WhatsApp</h2>
-              <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-sky-100 text-sky-800">Tempo Real</span>
+              <h2 class="text-sm sm:text-base font-bold text-slate-900">Radar de Novos Grupos de WhatsApp</h2>
+              <span class="text-[9px] sm:text-[10px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded-md bg-sky-100 text-sky-800">Tempo Real</span>
             </div>
             <p class="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
               O radar varre conversas e descrições dos seus mais de 400 grupos procurando links de grupos novos de 
@@ -440,9 +441,9 @@
             </p>
           </div>
 
-          <div class="flex items-center gap-2 flex-shrink-0">
+          <div class="w-full sm:w-auto flex items-center gap-2 flex-shrink-0">
             <button id="btnRadarScan" onclick="triggerRadarScan()" 
-                    class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 active:scale-95">
+                    class="w-full sm:w-auto justify-center px-4 py-2.5 sm:py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 active:scale-95">
               <i id="radarScanIcon" class="fa-solid fa-satellite-dish"></i>
               <span>Escanear Grupos Agora</span>
             </button>
@@ -451,35 +452,35 @@
       </div>
 
       <!-- Filtros do Radar & Inspecionar Link Manual -->
-      <div class="clean-card p-4 space-y-3">
+      <div class="clean-card p-3 sm:p-4 space-y-3">
         <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           
           <!-- Filtro de Categoria do Radar -->
-          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-            <button onclick="filterRadarCategory('all')" id="radarCat-all" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white shadow-sm">
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1.5 md:pb-0 scrollbar-none" style="-webkit-overflow-scrolling: touch;">
+            <button onclick="filterRadarCategory('all')" id="radarCat-all" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white shadow-sm whitespace-nowrap">
               Todos (<span id="radarCount-all">0</span>)
             </button>
-            <button onclick="filterRadarCategory('bairro')" id="radarCat-bairro" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">
+            <button onclick="filterRadarCategory('bairro')" id="radarCat-bairro" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap">
               🏘️ Bairros SP (<span id="radarCount-bairro">0</span>)
             </button>
-            <button onclick="filterRadarCategory('desapego')" id="radarCat-desapego" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">
+            <button onclick="filterRadarCategory('desapego')" id="radarCat-desapego" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap">
               🛍️ Desapego (<span id="radarCount-desapego">0</span>)
             </button>
-            <button onclick="filterRadarCategory('rolo')" id="radarCat-rolo" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">
+            <button onclick="filterRadarCategory('rolo')" id="radarCat-rolo" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap">
               🔁 Rolo / Trocas (<span id="radarCount-rolo">0</span>)
             </button>
-            <button onclick="filterRadarCategory('vendas')" id="radarCat-vendas" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">
+            <button onclick="filterRadarCategory('vendas')" id="radarCat-vendas" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap">
               💼 Vendas Locais (<span id="radarCount-vendas">0</span>)
             </button>
           </div>
 
           <!-- Inspecionar Link Manual / Testar -->
-          <div class="flex items-center gap-2">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div class="relative flex-1 sm:w-72">
               <input type="text" id="radarManualInput" placeholder="Colar link de grupo para testar..." 
-                     class="w-full pl-3 pr-8 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs focus:bg-white focus:outline-none focus:border-sky-400">
+                     class="w-full pl-3 pr-8 py-2 sm:py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs focus:bg-white focus:outline-none focus:border-sky-400">
             </div>
-            <button onclick="inspectManualRadarLink()" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold whitespace-nowrap">
+            <button onclick="inspectManualRadarLink()" class="px-3.5 py-2 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold whitespace-nowrap text-center">
               Inspecionar
             </button>
           </div>
@@ -510,19 +511,19 @@
 
   <!-- BARRA FLUTUANTE DE AÇÕES EM MASSA (APARECE QUANDO HÁ ITENS SELECIONADOS) -->
   <div id="bulkBar" class="bulk-bar">
-    <div class="bg-slate-900 text-white rounded-2xl px-5 py-3 shadow-xl flex items-center gap-4 border border-slate-700">
-      <div class="flex items-center gap-2">
-        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-        <span class="text-xs font-bold"><span id="bulkCount">0</span> grupos selecionados</span>
+    <div class="bg-slate-900 text-white rounded-2xl px-3.5 sm:px-5 py-2.5 sm:py-3 shadow-xl flex items-center justify-between gap-2 sm:gap-4 border border-slate-700 w-full">
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <span class="w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full bg-emerald-400"></span>
+        <span class="text-xs font-bold whitespace-nowrap"><span id="bulkCount">0</span> sel.</span>
       </div>
 
-      <div class="flex items-center gap-2">
-        <button onclick="clearSelection()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all">
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <button onclick="clearSelection()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all">
           Cancelar
         </button>
-        <button onclick="confirmBulkLeave()" class="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
-          <i class="fa-solid fa-arrow-right-from-bracket"></i>
-          <span>Sair dos Selecionados</span>
+        <button onclick="confirmBulkLeave()" class="px-3 sm:px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1 sm:gap-1.5 whitespace-nowrap">
+          <i class="fa-solid fa-arrow-right-from-bracket text-[11px]"></i>
+          <span>Sair dos Grupos</span>
         </button>
       </div>
     </div>
