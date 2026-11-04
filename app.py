@@ -569,7 +569,8 @@ if __name__ == "__main__":
     print(f"🌐 Acesse no seu navegador: http://127.0.0.1:{FLASK_PORT}")
     print("=" * 70)
     try:
-        app.run(host="127.0.0.1", port=FLASK_PORT, debug=False)
+        host = os.environ.get("FLASK_HOST", "0.0.0.0")
+        app.run(host=host, port=FLASK_PORT, debug=False)
     except OSError as e:
         if "Address already in use" in str(e):
             print(f"[Aviso] Porta {FLASK_PORT} já está em uso por outra instância do Gestor.")
