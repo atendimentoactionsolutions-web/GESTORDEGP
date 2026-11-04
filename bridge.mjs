@@ -432,6 +432,12 @@ async function resolveMissingGroupMetadata(forceAll = false) {
       if (!g) return false;
       if (forceAll) return true;
 
+      // Se for comunidade confirmada, não re-audita (raiz de comunidade sempre retorna 1 participante)
+      if (g.isCommunity) return false;
+
+      // Se já foi auditado nas últimas 2 horas, não sobrecarrega a conexão
+      if (g.lastAuditedAt && (Date.now() - g.lastAuditedAt < 1000 * 60 * 60 * 2)) return false;
+
       const pLen = g.participants?.length || 0;
       const size = g.size || 0;
       const sub = (g.subject || "").trim();
@@ -460,9 +466,14 @@ async function resolveMissingGroupMetadata(forceAll = false) {
       const g = groupsStore[jid];
       if (!g) continue;
 
+      g.lastAuditedAt = Date.now();
+
       try {
         const fullMeta = await sock.groupMetadata(jid);
         if (fullMeta) {
+          if (fullMeta.isCommunity || fullMeta.isCommunityAnnounce) {
+            g.isCommunity = true;
+          }
           if (fullMeta.subject && fullMeta.subject.trim()) {
             g.subject = fullMeta.subject.trim();
           }
@@ -493,7 +504,7 @@ async function resolveMissingGroupMetadata(forceAll = false) {
         connectionStatus.groupCount = Object.keys(groupsStore).length;
         saveGroupsCache();
       }
-      await new Promise((r) => setTimeout(r, 180));
+      await new Promise((r) => setTimeout(r, 350));
     }
 
     connectionStatus.groupCount = Object.keys(groupsStore).length;
@@ -620,6 +631,10 @@ async function startWhatsApp() {
       syncFullHistory: false,
       markOnlineOnConnect: false,
       generateHighQualityLinkPreview: false,
+      keepAliveIntervalMs: 25000,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      retryRequestDelayMs: 2500,
     });
 
     sock.ev.on("creds.update", () => {
@@ -855,6 +870,7 @@ async function startWhatsApp() {
         connectionStatus.lastMessage = `Desconectado: ${reason}`;
 
         const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+        const isConflict = statusCode === DisconnectReason.connectionReplaced || statusCode === 440 || (reason && String(reason).toLowerCase().includes("conflict"));
 
         if (isLoggedOut) {
           console.log("[Bridge] Sessão revogada no celular. Limpando credenciais para novo QR Code...");
@@ -863,12 +879,19 @@ async function startWhatsApp() {
           } catch (e) {}
           isStarting = false;
           setTimeout(() => startWhatsApp(), 1500);
-        } else {
-          console.log("[Bridge] Reconectando automaticamente em 3 segundos...");
+        } else if (isConflict) {
+          console.warn("[Bridge] Conflito detectado (440): Outra instância/dispositivo conectou com esta conta. Aguardando 40s para evitar disputa de conexão...");
+          connectionStatus.lastMessage = "Aviso: Outra conexão ativa com este WhatsApp. Aguardando estabilização...";
           setTimeout(() => {
             isStarting = false;
             startWhatsApp();
-          }, 3000);
+          }, 40000);
+        } else {
+          console.log("[Bridge] Reconectando automaticamente em 5 segundos...");
+          setTimeout(() => {
+            isStarting = false;
+            startWhatsApp();
+          }, 5000);
         }
       }
     });
@@ -1479,10 +1502,10 @@ server.listen(PORT, "127.0.0.1", () => {
   console.log(`[Bridge] WhatsApp Bridge operacional em http://127.0.0.1:${PORT}`);
   startWhatsApp();
 
-  // Watchdog contínuo em background: verifica a cada 35 segundos se há grupos com discrepância de participantes
+  // Watchdog contínuo em background: verifica a cada 5 minutos se há grupos com discrepância de participantes
   setInterval(() => {
     if (sock && connectionStatus.state === "connected" && !isResolvingMetadata && !isSyncingGroups) {
       resolveMissingGroupMetadata(false);
     }
-  }, 35000);
+  }, 300000);
 });
