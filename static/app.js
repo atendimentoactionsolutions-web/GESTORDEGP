@@ -412,11 +412,11 @@ function updateSortMenoresBtn(currentSort) {
 
   const sortVal = currentSort || document.getElementById("sortBy")?.value;
   if (sortVal === "members_asc") {
-    btn.className = "flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition-all border border-emerald-600 active:scale-95 shadow-sm";
+    btn.className = "col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition-all border border-emerald-600 active:scale-95 shadow-sm";
     if (icon) icon.className = "fa-solid fa-arrow-up-short-wide text-xs text-white";
     if (text) text.textContent = "✓ Menores Primeiro";
   } else {
-    btn.className = "flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all border border-slate-200 active:scale-95 shadow-sm";
+    btn.className = "col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-all border border-emerald-200 active:scale-95 shadow-sm";
     if (icon) icon.className = "fa-solid fa-arrow-up-short-wide text-xs text-emerald-600";
     if (text) text.textContent = "Menores → Maiores";
   }
@@ -963,9 +963,9 @@ function filterRadarCategory(catKey) {
     const btn = document.getElementById(`radarCat-${c}`);
     if (btn) {
       if (c === catKey) {
-        btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white shadow-sm";
+        btn.className = "flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white shadow-sm whitespace-nowrap";
       } else {
-        btn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200";
+        btn.className = "flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap";
       }
     }
   }
@@ -1120,13 +1120,18 @@ async function executeClearRadar() {
     if (data.ok) {
       showToast(`Radar limpo com sucesso! ${data.removedCount || 0} grupos removidos.`, "success");
       closeClearRadarModal();
-      await loadRadarGroups();
-
-      // Zera contadores visuais
+      state.radarGroups = [];
+      renderRadar();
+      const cats = ["all", "bairro", "desapego", "rolo", "vendas"];
+      for (const c of cats) {
+        const el = document.getElementById(`radarCount-${c}`);
+        if (el) el.innerText = "0";
+      }
       const kpi = document.getElementById("kpiRadarCount");
       if (kpi) kpi.innerText = "0";
       const tabCount = document.getElementById("tabCount-radar");
       if (tabCount) tabCount.innerText = "0";
+      await loadRadarGroups();
     } else {
       showToast(data.error || "Não foi possível limpar o radar.", "error");
     }

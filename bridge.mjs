@@ -270,13 +270,17 @@ async function processInviteCode(code, fromGroupId = "", fromGroupName = "") {
     console.log(`[Radar] Grupo aprovado: "${subject}" (${category}${bairroName ? ` - ${bairroName}` : ""})`);
     return radarStore[cleanCode];
   } catch (err) {
-    radarStore[cleanCode] = {
-      code: cleanCode,
-      discarded: true,
-      reason: err.message || "invalid",
-      evaluatedAt: new Date().toISOString()
-    };
-    saveRadar();
+    const errMsg = String(err.message || "").toLowerCase();
+    const isTempError = errMsg.includes("rate-overlimit") || errMsg.includes("timeout") || errMsg.includes("timed out") || errMsg.includes("temporarily");
+    if (!isTempError) {
+      radarStore[cleanCode] = {
+        code: cleanCode,
+        discarded: true,
+        reason: err.message || "invalid",
+        evaluatedAt: new Date().toISOString()
+      };
+      saveRadar();
+    }
     return null;
   }
 }
