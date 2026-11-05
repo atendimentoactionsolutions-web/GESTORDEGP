@@ -1485,6 +1485,38 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 13. Radar de Grupos: Limpar / Apagar Todos os Grupos do Radar
+  if (req.method === "POST" && url.pathname === "/radar/clear") {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", async () => {
+      try {
+        const payload = JSON.parse(body || "{}");
+        const category = (payload.category || "all").trim().toLowerCase();
+
+        let removedCount = 0;
+        if (category === "all") {
+          removedCount = Object.keys(radarStore).length;
+          radarStore = {};
+        } else {
+          for (const [code, item] of Object.entries(radarStore)) {
+            if (item && item.category === category) {
+              delete radarStore[code];
+              removedCount++;
+            }
+          }
+        }
+        saveRadar();
+        console.log(`[Radar] Limpeza executada: ${removedCount} grupos removidos.`);
+        res.end(JSON.stringify({ ok: true, removedCount }));
+      } catch (err) {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   res.statusCode = 404;
   res.end(JSON.stringify({ error: "Rota não encontrada" }));
 });

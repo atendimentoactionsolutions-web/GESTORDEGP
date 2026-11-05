@@ -441,11 +441,17 @@
             </p>
           </div>
 
-          <div class="w-full sm:w-auto flex items-center gap-2 flex-shrink-0">
+          <div class="w-full sm:w-auto flex flex-wrap items-center gap-2 flex-shrink-0">
             <button id="btnRadarScan" onclick="triggerRadarScan()" 
-                    class="w-full sm:w-auto justify-center px-4 py-2.5 sm:py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 active:scale-95">
+                    class="flex-1 sm:flex-initial justify-center px-4 py-2.5 sm:py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 active:scale-95">
               <i id="radarScanIcon" class="fa-solid fa-satellite-dish"></i>
               <span>Escanear Grupos Agora</span>
+            </button>
+            <button id="btnRadarClear" onclick="openClearRadarModal()" 
+                    class="flex-1 sm:flex-initial justify-center px-3.5 py-2.5 sm:py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95" 
+                    title="Apagar e limpar todos os grupos descobertos no Radar">
+              <i class="fa-solid fa-trash-can text-rose-600"></i>
+              <span>Limpar Radar</span>
             </button>
           </div>
         </div>
@@ -486,6 +492,19 @@
           </div>
 
         </div>
+      </div>
+
+      <!-- Barra Informativa e Ação de Limpar Grupos do Radar -->
+      <div id="radarActionBar" class="flex flex-wrap items-center justify-between gap-2.5 px-1 py-1 text-xs">
+        <div class="text-slate-600 font-medium flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Exibindo <strong id="radarVisibleCountText" class="text-slate-900">0</strong> grupos descobertos (que você ainda não está)</span>
+        </div>
+        <button onclick="openClearRadarModal()" 
+                class="text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-rose-200 transition-all active:scale-95 shadow-sm">
+          <i class="fa-solid fa-trash-can text-[11px]"></i>
+          <span>Apagar Todos do Radar</span>
+        </button>
       </div>
 
       <!-- Grid de Grupos Descobertos pelo Radar -->
@@ -552,6 +571,39 @@
         </button>
         <button id="btnConfirmLeaveAction" onclick="executeLeaveGroup()" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm">
           Sim, Sair Agora
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIRMAÇÃO DE LIMPEZA DO RADAR -->
+  <div id="clearRadarModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm hidden">
+    <div class="clean-card modal-animate max-w-md w-full p-6 space-y-4">
+      <div class="flex items-start gap-3.5">
+        <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 text-lg">
+          <i class="fa-solid fa-trash-can"></i>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-slate-900">Limpar Grupos do Radar</h3>
+          <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+            Tem certeza de que deseja apagar todos os grupos encontrados no Radar? 
+            Essa ação removerá os links rastreados da lista e deixará o Radar limpo e pronto para novas varreduras.
+          </p>
+        </div>
+      </div>
+
+      <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
+        <i class="fa-solid fa-circle-info text-amber-600 flex-shrink-0"></i>
+        <span>Serão removidos <strong><span id="clearRadarCount">0</span> grupos</strong> atualmente no radar.</span>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 pt-2">
+        <button onclick="closeClearRadarModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all">
+          Cancelar
+        </button>
+        <button id="btnConfirmClearRadar" onclick="executeClearRadar()" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95">
+          <i class="fa-solid fa-trash-can text-xs"></i>
+          <span>Sim, Limpar Tudo</span>
         </button>
       </div>
     </div>

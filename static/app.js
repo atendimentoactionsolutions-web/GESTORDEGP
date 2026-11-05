@@ -851,17 +851,25 @@ async function loadRadarGroups() {
 function renderRadar() {
   const grid = document.getElementById("radarGrid");
   const empty = document.getElementById("radarEmptyState");
+  const actionBar = document.getElementById("radarActionBar");
+  const visibleText = document.getElementById("radarVisibleCountText");
+  const clearBtn = document.getElementById("btnRadarClear");
   if (!grid) return;
 
   if (state.radarGroups.length === 0) {
     grid.innerHTML = "";
     grid.classList.add("hidden");
     if (empty) empty.classList.remove("hidden");
+    if (actionBar) actionBar.classList.add("hidden");
+    if (clearBtn) clearBtn.classList.add("opacity-50", "pointer-events-none");
     return;
   }
 
   if (empty) empty.classList.add("hidden");
   grid.classList.remove("hidden");
+  if (actionBar) actionBar.classList.remove("hidden");
+  if (visibleText) visibleText.textContent = state.radarGroups.length;
+  if (clearBtn) clearBtn.classList.remove("opacity-50", "pointer-events-none");
 
   grid.innerHTML = state.radarGroups.map(r => renderRadarCard(r)).join("");
 }
@@ -1075,6 +1083,60 @@ async function removeRadarGroup(code) {
     }
   } catch (err) {
     showToast("Erro: " + err.message, "error");
+  }
+}
+
+function openClearRadarModal() {
+  const count = state.radarGroups?.length || 0;
+  if (count === 0) {
+    showToast("O radar já está vazio. Nenhum grupo para apagar.", "info");
+    return;
+  }
+  const countElem = document.getElementById("clearRadarCount");
+  if (countElem) countElem.innerText = count;
+  const modal = document.getElementById("clearRadarModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeClearRadarModal() {
+  const modal = document.getElementById("clearRadarModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+async function executeClearRadar() {
+  const btn = document.getElementById("btnConfirmClearRadar");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Limpando...`;
+  }
+
+  try {
+    const res = await fetch("/api/radar/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: "all" })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showToast(`Radar limpo com sucesso! ${data.removedCount || 0} grupos removidos.`, "success");
+      closeClearRadarModal();
+      await loadRadarGroups();
+
+      // Zera contadores visuais
+      const kpi = document.getElementById("kpiRadarCount");
+      if (kpi) kpi.innerText = "0";
+      const tabCount = document.getElementById("tabCount-radar");
+      if (tabCount) tabCount.innerText = "0";
+    } else {
+      showToast(data.error || "Não foi possível limpar o radar.", "error");
+    }
+  } catch (err) {
+    showToast("Erro ao limpar radar: " + err.message, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-trash-can text-xs"></i><span>Sim, Limpar Tudo</span>`;
+    }
   }
 }
 

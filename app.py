@@ -557,6 +557,17 @@ def remove_radar_group():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/radar/clear", methods=["POST"])
+def clear_radar_groups():
+    """Limpa e apaga grupos do radar (todos ou por categoria)."""
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+        resp = requests.post(f"{BRIDGE_URL}/radar/clear", json=payload, timeout=5.0)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/")
 def serve_index():
     return send_from_directory("static", "index.html")
