@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 const makeWASocket = baileysModule.default || baileysModule.makeWASocket;
 const {
   useMultiFileAuthState,
+  makeCacheableSignalKeyStore,
   DisconnectReason,
   fetchLatestBaileysVersion,
   Browsers,
@@ -899,10 +900,14 @@ async function startWhatsApp() {
 
     cleanupSocket();
 
+    const silentLogger = pino({ level: "silent" });
     sock = makeWASocket({
       version,
-      logger: pino({ level: "silent" }),
-      auth: state,
+      logger: silentLogger,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore ? makeCacheableSignalKeyStore(state.keys, silentLogger) : state.keys,
+      },
       browser: Browsers.macOS("Desktop"),
       syncFullHistory: false,
       markOnlineOnConnect: false,
@@ -1219,7 +1224,14 @@ const server = http.createServer(async (req, res) => {
       const eg = getGroupEngagement(g.id, g.participants?.length || g.size || 0);
       return {
         ...g,
-        engagement: eg,
+        engagement: {
+          messagesSentCount: eg.messagesSentCount || 0,
+          totalViewsCount: eg.totalViewsCount || 0,
+          viewRate: eg.viewRate || 0,
+          status: eg.status || "sem_envio",
+          lastMessageSentAt: eg.lastMessageSentAt || null,
+          lastActivityAt: eg.lastActivityAt || null,
+        },
       };
     });
     res.end(
