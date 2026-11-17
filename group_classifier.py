@@ -107,10 +107,10 @@ SP_BAIRROS_LIST = [
     ("Zona Sul", ["zona sul", "zs"]),
     ("Zona Norte", ["zona norte", "zn"]),
     ("Zona Oeste", ["zona oeste", "zo"]),
-    ("Centro de SP", ["centro sp", "sé", "se", "república", "republica", "bela vista", "consolação", "consolacao", "bom retiro", "santa cecília", "santa cecilia", "liberdade", "cambuci", "brás", "bras", "pari"]),
+    ("Centro de SP", ["centro sp", "centro de sp", "sé", "praça da sé", "metro se", "metrô sé", "república", "republica", "bela vista", "consolação", "consolacao", "bom retiro", "santa cecília", "santa cecilia", "liberdade", "cambuci", "brás", "bras", "pari"]),
     ("Parelheiros / Marsilac", ["parelheiros", "marsilac", "colônia"]),
     ("Grajaú", ["grajaú", "grajau", "cantinho do céu"]),
-    ("Interlagos / Socorro", ["interlagos", "socorro", "represa", "veleiros"]),
+    ("Interlagos / Socorro", ["interlagos", "socorro", "represa guarapiranga", "veleiros"]),
     ("Santo Amaro", ["santo amaro", "brooklin", "campo belo", "chácara flora"]),
     ("Campo Limpo", ["campo limpo", "piraporinha", "jd joão xxiii", "jd joao xxiii", "joão xxiii", "joao xxiii", "vila das belezas"]),
     ("Capão Redondo", ["capão redondo", "capao redondo", "capão", "capao", "parque fernanda"]),
@@ -322,7 +322,8 @@ def classify_group_size(count: int) -> str:
 
 def analyze_group_participants(
     group_data: Dict[str, Any],
-    current_user_jid: Optional[str] = None
+    current_user_jid: Optional[str] = None,
+    include_participants: bool = True
 ) -> Dict[str, Any]:
     """
     Analisa os participantes de um grupo e gera métricas detalhadas de DDD,
@@ -398,27 +399,28 @@ def analyze_group_participants(
         elif macro == "Internacional":
             international_count += 1
 
-        # Formatação do telefone para exibição humana
-        formatted_phone = digits
-        if digits.startswith("55") and len(digits) in (12, 13):
-            formatted_phone = f"+55 ({digits[2:4]}) {digits[4:-4]}-{digits[-4:]}"
-        elif digits.startswith("1") and len(digits) == 11:
-            formatted_phone = f"+1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
-        elif digits:
-            formatted_phone = f"+{digits}"
-        else:
-            formatted_phone = "Identidade Protegida (LID)"
+        if include_participants:
+            # Formatação do telefone para exibição humana
+            formatted_phone = digits
+            if digits.startswith("55") and len(digits) in (12, 13):
+                formatted_phone = f"+55 ({digits[2:4]}) {digits[4:-4]}-{digits[-4:]}"
+            elif digits.startswith("1") and len(digits) == 11:
+                formatted_phone = f"+1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
+            elif digits:
+                formatted_phone = f"+{digits}"
+            else:
+                formatted_phone = "Identidade Protegida (LID)"
 
-        participant_details.append({
-            "id": p_id,
-            "phoneNumber": digits,
-            "formatted": formatted_phone,
-            "ddd": ddd,
-            "label": label,
-            "macro": macro,
-            "admin": admin_type,
-            "isMe": is_me
-        })
+            participant_details.append({
+                "id": p_id,
+                "phoneNumber": digits,
+                "formatted": formatted_phone,
+                "ddd": ddd,
+                "label": label,
+                "macro": macro,
+                "admin": admin_type,
+                "isMe": is_me
+            })
 
     # Total de participantes que possuem número de telefone identificável
     total_identified = sum(ddd_counter.values())

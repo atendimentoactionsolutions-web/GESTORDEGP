@@ -9,6 +9,8 @@ import os
 import sys
 import json
 import time
+import shutil
+import threading
 import subprocess
 import atexit
 import requests
@@ -35,6 +37,7 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 app = Flask(__name__, static_folder="static", static_url_path="")
 bridge_process: Optional[subprocess.Popen] = None
 bridge_log_handle = None
+bridge_lock = threading.Lock()
 
 
 def find_node_executable() -> str:
@@ -42,50 +45,59 @@ def find_node_executable() -> str:
     local_node = os.path.join(BASE_DIR, ".runtime", "node", "bin", "node")
     if os.path.exists(local_node) and os.access(local_node, os.X_OK):
         return local_node
-    for candidate in [
-        "/Users/mac/Desktop/CONTATO EXTRATOR /.runtime/node/bin/node",
-        "/Users/mac/Desktop/CONTATO EXTRATOR/.runtime/node/bin/node",
-        "/usr/local/bin/node"
-    ]:
+    which_node = shutil.which("node")
+    if which_node:
+        return which_node
+    for candidate in ["/usr/local/bin/node", "/usr/bin/node"]:
         if os.path.exists(candidate) and os.access(candidate, os.X_OK):
             return candidate
     return "node"
 
 
 def ensure_bridge_running():
-    """Garante que o bridge do WhatsApp esteja em execução contínua sem deadlocks de pipe."""
+    """Garante que o bridge do WhatsApp esteja em execução contínua sem duplicar instâncias."""
     global bridge_process, bridge_log_handle
-    try:
-        resp = requests.get(f"{BRIDGE_URL}/status", timeout=1.2)
-        if resp.status_code == 200:
-            return  # Bridge já está ativo
-    except Exception:
-        pass
+    with bridge_lock:
+        try:
+            resp = requests.get(f"{BRIDGE_URL}/status", timeout=2.5)
+            if resp.status_code == 200:
+                return  # Bridge já está ativo
+        except Exception:
+            pass
 
-    node_bin = find_node_executable()
-    bridge_script = os.path.join(BASE_DIR, "bridge.mjs")
+        # Se o processo filho já está vivo, evita spawn duplicado enquanto inicializa ou processa
+        if bridge_process is not None and bridge_process.poll() is None:
+            return
 
-    print(f"[Python] Inicializando WhatsApp Bridge via {node_bin}...")
-    try:
-        bridge_log_handle = open(BRIDGE_LOG_FILE, "a", encoding="utf-8")
-        bridge_process = subprocess.Popen(
-            [node_bin, bridge_script],
-            cwd=BASE_DIR,
-            stdout=bridge_log_handle,
-            stderr=bridge_log_handle
-        )
-        # Aguarda brevemente para inicialização do socket
-        for _ in range(12):
-            time.sleep(0.3)
-            try:
-                r = requests.get(f"{BRIDGE_URL}/status", timeout=0.8)
-                if r.status_code == 200:
-                    break
-            except Exception:
-                pass
-        print("[Python] WhatsApp Bridge operacional.")
-    except Exception as e:
-        print(f"[Python] Falha ao iniciar processo do bridge: {e}")
+        node_bin = find_node_executable()
+        bridge_script = os.path.join(BASE_DIR, "bridge.mjs")
+
+        print(f"[Python] Inicializando WhatsApp Bridge via {node_bin}...")
+        try:
+            if bridge_log_handle and not bridge_log_handle.closed:
+                try:
+                    bridge_log_handle.close()
+                except Exception:
+                    pass
+            bridge_log_handle = open(BRIDGE_LOG_FILE, "a", encoding="utf-8")
+            bridge_process = subprocess.Popen(
+                [node_bin, bridge_script],
+                cwd=BASE_DIR,
+                stdout=bridge_log_handle,
+                stderr=bridge_log_handle
+            )
+            # Aguarda brevemente para inicialização do socket
+            for _ in range(15):
+                time.sleep(0.3)
+                try:
+                    r = requests.get(f"{BRIDGE_URL}/status", timeout=1.5)
+                    if r.status_code == 200:
+                        break
+                except Exception:
+                    pass
+            print("[Python] WhatsApp Bridge operacional.")
+        except Exception as e:
+            print(f"[Python] Falha ao iniciar processo do bridge: {e}")
 
 
 def cleanup_bridge():
@@ -115,8 +127,10 @@ atexit.register(cleanup_bridge)
 def check_bridge_health():
     """Verifica se as rotas da API encontram o bridge ativo."""
     if request.path.startswith("/api/"):
+        if bridge_process is not None and bridge_process.poll() is None:
+            return
         try:
-            requests.get(f"{BRIDGE_URL}/status", timeout=0.6)
+            requests.get(f"{BRIDGE_URL}/status", timeout=3.0)
         except Exception:
             ensure_bridge_running()
 
@@ -171,10 +185,10 @@ def get_groups():
     except Exception as e:
         return jsonify({"ok": False, "error": f"Erro de comunicação com o WhatsApp Bridge: {e}"}), 500
 
-    # Classifica todos os grupos participantes (sem excluir nenhum grupo do usuário)
+    # Classifica todos os grupos participantes (sem incluir lista completa de participantes no payload geral)
     classified_groups = []
     for g in raw_groups:
-        analyzed = analyze_group_participants(g, current_user_jid)
+        analyzed = analyze_group_participants(g, current_user_jid, include_participants=False)
         classified_groups.append(analyzed)
 
     # Parâmetros de filtro
@@ -384,7 +398,7 @@ def get_summary():
 
         resp = requests.get(f"{BRIDGE_URL}/groups", timeout=15.0)
         raw_groups = resp.json().get("groups", [])
-        classified = [analyze_group_participants(g, current_user_jid) for g in raw_groups]
+        classified = [analyze_group_participants(g, current_user_jid, include_participants=False) for g in raw_groups]
         summary = compute_global_summary(classified)
         return jsonify({"ok": True, "summary": summary})
     except Exception as e:
@@ -418,7 +432,7 @@ def leave_group():
     """
     try:
         data = request.get_json(force=True, silent=True) or {}
-        resp = requests.post(f"{BRIDGE_URL}/leave", json=data, timeout=35.0)
+        resp = requests.post(f"{BRIDGE_URL}/leave", json=data, timeout=180.0)
         return jsonify(resp.json()), resp.status_code
     except Exception as e:
         return jsonify({"ok": False, "error": f"Falha ao processar saída: {e}"}), 500
@@ -428,7 +442,7 @@ def leave_group():
 def refresh_groups():
     """Força atualização dos grupos do WhatsApp em tempo real."""
     try:
-        resp = requests.post(f"{BRIDGE_URL}/refresh", timeout=30.0)
+        resp = requests.post(f"{BRIDGE_URL}/refresh", timeout=60.0)
         return jsonify(resp.json()), resp.status_code
     except Exception as e:
         return jsonify({"ok": False, "error": f"Falha ao sincronizar: {e}"}), 500

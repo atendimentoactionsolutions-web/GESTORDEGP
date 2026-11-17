@@ -28,12 +28,98 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 let sock = null;
 let isStarting = false;
 let isSyncingGroups = false;
+let reconnectTimer = null;
+let consecutiveDisconnects = 0;
+let lastAutoAuditAt = 0;
+let lastAutoRadarScanAt = 0;
 let groupsStore = {}; // jid -> GroupMetadata
 let lastSyncTimestamp = null;
 
 // Tabelas de mapeamento de LID -> Número de Telefone
 const lidToPn = {};
 const pnToLid = {};
+
+// Cria gravador atômico assíncrono com debounce para não travar o event loop
+function createDebouncedSaver(filePath, getData, defaultDelayMs = 5000) {
+  let timer = null;
+  let dirty = false;
+  let writing = false;
+  let pendingWhileWriting = false;
+
+  async function writeNow() {
+    if (writing) {
+      pendingWhileWriting = true;
+      return;
+    }
+    if (!dirty) return;
+    dirty = false;
+    writing = true;
+    const tmp = `${filePath}.tmp`;
+    try {
+      const json = JSON.stringify(getData());
+      await fs.promises.writeFile(tmp, json, "utf-8");
+      await fs.promises.rename(tmp, filePath);
+    } catch (e) {
+      console.error(`Erro ao salvar ${path.basename(filePath)}:`, e.message);
+    } finally {
+      writing = false;
+      if (pendingWhileWriting || dirty) {
+        pendingWhileWriting = false;
+        schedule(1000);
+      }
+    }
+  }
+
+  function schedule(delayMs = defaultDelayMs) {
+    dirty = true;
+    if (timer) return;
+    timer = setTimeout(() => {
+      timer = null;
+      writeNow();
+    }, delayMs);
+  }
+
+  function flushSync() {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (!dirty) return;
+    dirty = false;
+    const tmp = `${filePath}.tmp`;
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(getData()), "utf-8");
+      fs.renameSync(tmp, filePath);
+    } catch (e) {
+      console.error(`Erro ao salvar ${path.basename(filePath)} (sync):`, e.message);
+    }
+  }
+
+  return { schedule, writeNow, flushSync };
+}
+
+const MAX_SENT_MESSAGES_PER_GROUP = 15;
+const MAX_VIEWER_LIST_MESSAGES = 10;
+const ENGAGEMENT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14; // 14 dias
+
+// Set em memória para deduplicação O(1) de visualizadores por "groupId|msgId"
+const viewerSets = new Map();
+
+function getViewerSet(groupId, msgId, initialViewers = []) {
+  const key = `${groupId}|${msgId}`;
+  let set = viewerSets.get(key);
+  if (!set) {
+    set = new Set();
+    if (Array.isArray(initialViewers)) {
+      for (const v of initialViewers) {
+        const d = cleanDigits(String(v));
+        if (d) set.add(d);
+      }
+    }
+    viewerSets.set(key, set);
+  }
+  return set;
+}
 
 // Armazenamento de engajamento e métricas de visualização de mensagens enviadas
 let engagementStore = {};
@@ -45,14 +131,79 @@ if (fs.existsSync(ENGAGEMENT_FILE)) {
   }
 }
 
-function saveEngagement() {
-  try {
-    const tmp = `${ENGAGEMENT_FILE}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(engagementStore, null, 2), "utf-8");
-    fs.renameSync(tmp, ENGAGEMENT_FILE);
-  } catch (e) {
-    console.error("Erro ao salvar dados de engajamento:", e.message);
+const engagementSaver = createDebouncedSaver(ENGAGEMENT_FILE, () => engagementStore, 15000);
+
+function saveEngagement(immediate = false) {
+  if (immediate) engagementSaver.schedule(500);
+  else engagementSaver.schedule(15000);
+}
+
+function pruneAndRecalcEngagementEntry(jid, eg) {
+  if (!eg || typeof eg !== "object") return;
+  const sentMap = eg.sentMessages && typeof eg.sentMessages === "object" ? eg.sentMessages : {};
+  const now = Date.now();
+  const entries = Object.entries(sentMap)
+    .filter(([, m]) => m && typeof m === "object")
+    .filter(([, m]) => !m.sentAt || (now - m.sentAt <= ENGAGEMENT_MAX_AGE_MS))
+    .sort((a, b) => (b[1].sentAt || 0) - (a[1].sentAt || 0));
+
+  // Se todas forem mais antigas que 14 dias, mantém até 5 últimas para não zerar referência bruscamente
+  const kept = entries.length > 0
+    ? entries.slice(0, MAX_SENT_MESSAGES_PER_GROUP)
+    : Object.entries(sentMap)
+        .filter(([, m]) => m && typeof m === "object")
+        .sort((a, b) => (b[1].sentAt || 0) - (a[1].sentAt || 0))
+        .slice(0, 5);
+
+  const keptIds = new Set(kept.map(([id]) => id));
+  for (const oldId of Object.keys(sentMap)) {
+    if (!keptIds.has(oldId)) {
+      viewerSets.delete(`${jid}|${oldId}`);
+    }
   }
+
+  const newSentMap = {};
+  let totalViews = 0;
+
+  kept.forEach(([msgId, m], idx) => {
+    const vSet = getViewerSet(jid, msgId, m.viewers);
+    const viewsCount = Math.max(Number(m.views || 0), vSet.size);
+    totalViews += viewsCount;
+
+    if (idx < MAX_VIEWER_LIST_MESSAGES) {
+      newSentMap[msgId] = {
+        sentAt: m.sentAt || now,
+        views: viewsCount,
+        viewers: Array.from(vSet)
+      };
+    } else {
+      viewerSets.delete(`${jid}|${msgId}`);
+      newSentMap[msgId] = {
+        sentAt: m.sentAt || now,
+        views: viewsCount
+      };
+    }
+  });
+
+  eg.sentMessages = newSentMap;
+  eg.messagesSentCount = kept.length;
+  eg.totalViewsCount = totalViews;
+}
+
+function compactEngagementStore(validGroupIds = null) {
+  let changed = false;
+  for (const [jid, eg] of Object.entries(engagementStore)) {
+    if (validGroupIds && !validGroupIds.has(jid)) {
+      delete engagementStore[jid];
+      changed = true;
+      continue;
+    }
+    const beforeCount = Object.keys(eg?.sentMessages || {}).length;
+    pruneAndRecalcEngagementEntry(jid, eg);
+    const afterCount = Object.keys(eg?.sentMessages || {}).length;
+    if (beforeCount !== afterCount) changed = true;
+  }
+  return changed;
 }
 
 function getGroupEngagement(jid, totalParticipants = 0) {
@@ -97,14 +248,11 @@ if (fs.existsSync(RADAR_FILE)) {
   }
 }
 
-function saveRadar() {
-  try {
-    const tmp = `${RADAR_FILE}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(radarStore, null, 2), "utf-8");
-    fs.renameSync(tmp, RADAR_FILE);
-  } catch (e) {
-    console.error("Erro ao salvar radar:", e.message);
-  }
+const radarSaver = createDebouncedSaver(RADAR_FILE, () => radarStore, 2000);
+
+function saveRadar(immediate = false) {
+  if (immediate) radarSaver.schedule(200);
+  else radarSaver.schedule(2000);
 }
 
 const RADAR_BLACKLIST = [
@@ -142,10 +290,10 @@ const SP_BAIRROS_RADAR = [
   ["Zona Sul", ["zona sul", "zs"]],
   ["Zona Norte", ["zona norte", "zn"]],
   ["Zona Oeste", ["zona oeste", "zo"]],
-  ["Centro de SP", ["centro sp", "sé", "república", "bela vista", "consolação", "bom retiro", "santa cecília", "liberdade", "cambuci", "brás", "bras", "pari"]],
+  ["Centro de SP", ["centro sp", "centro de sp", "sé", "praça da sé", "metro se", "metrô sé", "república", "bela vista", "consolação", "bom retiro", "santa cecília", "liberdade", "cambuci", "brás", "bras", "pari"]],
   ["Parelheiros / Marsilac", ["parelheiros", "marsilac"]],
   ["Grajaú", ["grajaú", "grajau"]],
-  ["Interlagos / Socorro", ["interlagos", "socorro", "represa"]],
+  ["Interlagos / Socorro", ["interlagos", "socorro", "represa guarapiranga"]],
   ["Santo Amaro", ["santo amaro", "brooklin", "campo belo"]],
   ["Campo Limpo", ["campo limpo", "piraporinha", "joão xxiii", "joao xxiii"]],
   ["Capão Redondo", ["capão redondo", "capao redondo", "capão", "capao"]],
@@ -169,7 +317,7 @@ const SP_BAIRROS_RADAR = [
   ["Pirituba / Jaraguá", ["pirituba", "jaraguá", "jaragua", "perus"]],
   ["Lapa / Leopoldina", ["lapa", "vila leopoldina", "barra funda"]],
   ["Pinheiros / Perdizes", ["pinheiros", "perdizes", "vila madalena", "butantã", "butanta", "rio pequeno", "jaguare", "jaguaré", "raposo"]],
-  ["ABC Paulista", ["abc", "santo andré", "santo andre", "são bernardo", "sao bernardo", "são caetano", "sao caetano", "diadema", "mauá", "maua", "vila luzita", "clube de campo"]],
+  ["ABC Paulista", ["abc", "santo andré", "santo andre", "são bernardo", "sao bernardo", "são caetano", "sao caetano", "diadema", "mauá", "maua", "vila luzita", "clube de campo", "represa"]],
   ["Osasco / Barueri", ["osasco", "barueri", "alphaville", "carapicuíba", "carapicuiba"]],
   ["Cotia / Taboão / Embu", ["cotia", "taboão", "taboao", "embu das artes", "embu", "itapecerica"]],
   ["Guarulhos", ["guarulhos", "cumbica"]],
@@ -177,7 +325,61 @@ const SP_BAIRROS_RADAR = [
   ["Alto Tietê", ["itaquaquecetuba", "ferraz", "poá", "poa", "suzano", "mogi das cruzes"]]
 ];
 
+function stripAccents(str) {
+  return String(str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function escapeRegexStr(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasWordMatch(normalizedText, terms) {
+  for (const rawTerm of terms) {
+    const term = stripAccents(rawTerm).trim();
+    if (!term) continue;
+    const regex = new RegExp(`(?:^|[^a-z0-9])${escapeRegexStr(term)}(?:$|[^a-z0-9])`);
+    if (regex.test(normalizedText)) return true;
+  }
+  return false;
+}
+
 let isScanningRadar = false;
+const inFlightInviteCodes = new Set();
+const radarInviteQueue = [];
+let isProcessingInviteQueue = false;
+let radarRateLimitUntil = 0;
+
+function enqueueRadarInvite(code, fromGroupId = "", fromGroupName = "") {
+  if (!code || typeof code !== "string") return;
+  const cleanCode = code.trim().replace(/[^A-Za-z0-9_-]/g, "");
+  if (!cleanCode || cleanCode.length < 18) return;
+  if (radarStore[cleanCode] || inFlightInviteCodes.has(cleanCode)) return;
+  if (Date.now() < radarRateLimitUntil) return;
+  if (radarInviteQueue.some((item) => item.code === cleanCode)) return;
+  if (radarInviteQueue.length >= 40) return;
+
+  radarInviteQueue.push({ code: cleanCode, fromGroupId, fromGroupName });
+  drainRadarInviteQueue();
+}
+
+async function drainRadarInviteQueue() {
+  if (isProcessingInviteQueue || !sock) return;
+  isProcessingInviteQueue = true;
+  try {
+    while (radarInviteQueue.length > 0 && sock) {
+      if (Date.now() < radarRateLimitUntil) {
+        radarInviteQueue.length = 0;
+        break;
+      }
+      const next = radarInviteQueue.shift();
+      if (!next || radarStore[next.code]) continue;
+      await processInviteCode(next.code, next.fromGroupId, next.fromGroupName);
+      await new Promise((r) => setTimeout(r, 1100));
+    }
+  } finally {
+    isProcessingInviteQueue = false;
+  }
+}
 
 async function processInviteCode(code, fromGroupId = "", fromGroupName = "") {
   if (!code || typeof code !== "string") return null;
@@ -188,15 +390,17 @@ async function processInviteCode(code, fromGroupId = "", fromGroupName = "") {
     return radarStore[cleanCode].discarded ? null : radarStore[cleanCode];
   }
 
-  if (!sock) return null;
+  if (!sock || inFlightInviteCodes.has(cleanCode)) return null;
+  if (Date.now() < radarRateLimitUntil) return null;
 
+  inFlightInviteCodes.add(cleanCode);
   try {
     const meta = await sock.groupGetInviteInfo(cleanCode);
     if (!meta || !meta.id) return null;
 
     const subject = (meta.subject || "").trim();
     const desc = (meta.desc || "").trim();
-    const fullText = `${subject} ${desc}`.toLowerCase();
+    const normalizedText = stripAccents(`${subject} ${desc}`);
 
     // 1. Se o usuário JÁ PARTICIPA do grupo, descarta do radar imediatamente (o radar só mostra grupos novos para entrar)
     if (meta.id && groupsStore[meta.id]) {
@@ -227,22 +431,22 @@ async function processInviteCode(code, fromGroupId = "", fromGroupName = "") {
       return null;
     }
 
-    // 2. Classificação: Bairros SP, Desapego, Rolo, Vendas
+    // 3. Classificação com bordas de palavra: Bairros SP, Desapego, Rolo, Vendas
     let category = "vendas";
     let bairroName = "";
 
     for (const [bName, aliases] of SP_BAIRROS_RADAR) {
-      if (aliases.some((a) => fullText.includes(a))) {
+      if (hasWordMatch(normalizedText, aliases)) {
         category = "bairro";
         bairroName = bName;
         break;
       }
     }
 
-    const isDesapego = ["desapego", "desapega", "desapegue", "bazar", "brechó", "brecho", "usados", "usado"].some((w) => fullText.includes(w));
+    const isDesapego = hasWordMatch(normalizedText, ["desapego", "desapega", "desapegue", "desapegos", "bazar", "brecho", "usados", "usado"]);
     if (isDesapego) category = "desapego";
 
-    const isRolo = ["rolo", "rolos", "troca", "trocas", "brique", "escambo", "feira do rolo"].some((w) => fullText.includes(w));
+    const isRolo = hasWordMatch(normalizedText, ["rolo", "rolos", "troca", "trocas", "brique", "escambo", "feira do rolo"]);
     if (isRolo) category = "rolo";
 
     const alreadyInGroup = !!(meta.id && groupsStore[meta.id]);
@@ -271,7 +475,13 @@ async function processInviteCode(code, fromGroupId = "", fromGroupName = "") {
     return radarStore[cleanCode];
   } catch (err) {
     const errMsg = String(err.message || "").toLowerCase();
-    const isTempError = errMsg.includes("rate-overlimit") || errMsg.includes("timeout") || errMsg.includes("timed out") || errMsg.includes("temporarily");
+    const isRateLimit = errMsg.includes("rate-overlimit") || errMsg.includes("429");
+    if (isRateLimit) {
+      radarRateLimitUntil = Date.now() + 1000 * 60 * 5;
+      console.warn("[Radar] Rate-limit detectado pelo WhatsApp. Pausando consultas do radar por 5 minutos.");
+      return null;
+    }
+    const isTempError = errMsg.includes("timeout") || errMsg.includes("timed out") || errMsg.includes("temporarily");
     if (!isTempError) {
       radarStore[cleanCode] = {
         code: cleanCode,
@@ -282,12 +492,16 @@ async function processInviteCode(code, fromGroupId = "", fromGroupName = "") {
       saveRadar();
     }
     return null;
+  } finally {
+    inFlightInviteCodes.delete(cleanCode);
   }
 }
 
 async function scanRadarNow() {
   if (isScanningRadar || !sock) return;
+  if (Date.now() < radarRateLimitUntil) return;
   isScanningRadar = true;
+  lastAutoRadarScanAt = Date.now();
   console.log("[Radar] Iniciando varredura em grupos e descrições...");
 
   try {
@@ -295,14 +509,16 @@ async function scanRadarNow() {
     const allGroups = Object.values(groupsStore);
 
     for (const g of allGroups) {
-      if (!sock) break;
+      if (!sock || Date.now() < radarRateLimitUntil) break;
       const text = `${g.subject || ""} ${g.desc || ""}`;
+      linkRegex.lastIndex = 0;
       let match;
       while ((match = linkRegex.exec(text)) !== null) {
+        if (!sock || Date.now() < radarRateLimitUntil) break;
         const code = match[1];
         if (!radarStore[code]) {
           await processInviteCode(code, g.id, g.subject);
-          await new Promise((r) => setTimeout(r, 650));
+          await new Promise((r) => setTimeout(r, 1100));
         }
       }
     }
@@ -387,19 +603,29 @@ if (fs.existsSync(GROUPS_CACHE_FILE)) {
   }
 }
 
-function saveGroupsCache() {
-  try {
-    const payload = {
-      lastSync: lastSyncTimestamp || new Date().toISOString(),
-      groupsCount: Object.keys(groupsStore).length,
-      groups: groupsStore,
-    };
-    const tmp = `${GROUPS_CACHE_FILE}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), "utf-8");
-    fs.renameSync(tmp, GROUPS_CACHE_FILE);
-  } catch (err) {
-    console.error("Erro ao salvar cache de grupos:", err.message);
+// Compacta engagementStore na inicialização (poda histórico antigo/órfão que inflamava o arquivo)
+{
+  const validIds = Object.keys(groupsStore).length > 0 ? new Set(Object.keys(groupsStore)) : null;
+  const compacted = compactEngagementStore(validIds);
+  if (compacted) {
+    console.log("[Bridge] Histórico de engajamento compactado na inicialização.");
+    saveEngagement(true);
   }
+}
+
+const groupsCacheSaver = createDebouncedSaver(
+  GROUPS_CACHE_FILE,
+  () => ({
+    lastSync: lastSyncTimestamp || new Date().toISOString(),
+    groupsCount: Object.keys(groupsStore).length,
+    groups: groupsStore,
+  }),
+  3000
+);
+
+function saveGroupsCache(immediate = false) {
+  if (immediate) groupsCacheSaver.schedule(300);
+  else groupsCacheSaver.schedule(3000);
 }
 
 function enrichParticipant(p) {
@@ -424,10 +650,13 @@ function enrichParticipant(p) {
 }
 
 let isResolvingMetadata = false;
+let auditRateLimitUntil = 0;
 
 async function resolveMissingGroupMetadata(forceAll = false) {
   if (!sock || isResolvingMetadata) return;
+  if (!forceAll && Date.now() < auditRateLimitUntil) return;
   isResolvingMetadata = true;
+  lastAutoAuditAt = Date.now();
 
   try {
     const allKeys = Object.keys(groupsStore);
@@ -436,11 +665,11 @@ async function resolveMissingGroupMetadata(forceAll = false) {
       if (!g) return false;
       if (forceAll) return true;
 
-      // Se for comunidade confirmada, não re-audita (raiz de comunidade sempre retorna 1 participante)
-      if (g.isCommunity) return false;
+      // Se for comunidade confirmada ou grupo já confirmado como unitário, não re-audita
+      if (g.isCommunity || g.noMoreParticipants) return false;
 
-      // Se já foi auditado nas últimas 2 horas, não sobrecarrega a conexão
-      if (g.lastAuditedAt && (Date.now() - g.lastAuditedAt < 1000 * 60 * 60 * 2)) return false;
+      // Se já foi auditado nas últimas 12 horas, não sobrecarrega a conexão
+      if (g.lastAuditedAt && (Date.now() - g.lastAuditedAt < 1000 * 60 * 60 * 12)) return false;
 
       const pLen = g.participants?.length || 0;
       const size = g.size || 0;
@@ -451,14 +680,13 @@ async function resolveMissingGroupMetadata(forceAll = false) {
       if (pLen <= 1) return true;
       // 2. Não tem nome real ou está com placeholder temporário
       if (!sub || sub.startsWith("Grupo WhatsApp (") || sub.startsWith("Grupo ")) return true;
-      // 3. A lista de participantes é menor que o tamanho reportado pelo WhatsApp
-      if (size > pLen) return true;
+      // 3. Diferença relevante (>= 3) entre tamanho reportado e lista de participantes
+      if (size - pLen >= 3) return true;
 
       return false;
     });
 
     if (missing.length === 0) {
-      isResolvingMetadata = false;
       return;
     }
 
@@ -482,14 +710,19 @@ async function resolveMissingGroupMetadata(forceAll = false) {
             g.subject = fullMeta.subject.trim();
           }
           g.desc = fullMeta.desc || g.desc || "";
-          
+
           if (Array.isArray(fullMeta.participants) && fullMeta.participants.length > 0) {
             g.participants = fullMeta.participants;
             for (const p of g.participants) {
               enrichParticipant(p);
             }
           }
-          g.size = Math.max(fullMeta.size || 0, g.participants?.length || 0, fullMeta.participants?.length || 0, g.size || 0);
+          g.size = Math.max(fullMeta.size || 0, g.participants?.length || 0);
+          if ((g.participants?.length || 0) <= 1 && g.size <= 1) {
+            g.noMoreParticipants = true;
+          } else {
+            delete g.noMoreParticipants;
+          }
           g.creation = fullMeta.creation || g.creation;
           g.owner = fullMeta.owner || g.owner;
           g.announce = fullMeta.announce ?? g.announce;
@@ -497,6 +730,12 @@ async function resolveMissingGroupMetadata(forceAll = false) {
           resolved++;
         }
       } catch (err) {
+        const errMsg = String(err.message || "").toLowerCase();
+        if (errMsg.includes("rate-overlimit") || errMsg.includes("429")) {
+          auditRateLimitUntil = Date.now() + 1000 * 60 * 15;
+          console.warn("[Bridge] Rate-limit do WhatsApp durante auditoria. Interrompendo ciclo por 15 minutos.");
+          break;
+        }
         // NUNCA deleta o grupo do usuário em caso de erro! Mantém o grupo acessível para sair ou gerenciar.
         const rawGid = jid.split("@")[0];
         if (!g.subject || !g.subject.trim()) {
@@ -504,11 +743,7 @@ async function resolveMissingGroupMetadata(forceAll = false) {
         }
       }
 
-      if (resolved > 0 && resolved % 5 === 0) {
-        connectionStatus.groupCount = Object.keys(groupsStore).length;
-        saveGroupsCache();
-      }
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 1200));
     }
 
     connectionStatus.groupCount = Object.keys(groupsStore).length;
@@ -528,15 +763,12 @@ async function fetchGroupsNow() {
 
   isSyncingGroups = true;
   connectionStatus.isSyncing = true;
-  connectionStatus.lastMessage = "Buscando todos os mais de 400 grupos no WhatsApp...";
+  connectionStatus.lastMessage = "Sincronizando grupos no WhatsApp...";
 
   // Escaneia arquivos LID para enriquecer números de telefone
   scanLidMappingFiles(AUTH_DIR);
-  for (const fallbackDir of [
-    "/Users/mac/Desktop/CONTATO EXTRATOR /data/wa_auth",
-    "/Users/mac/Desktop/CONTATO EXTRATOR/data/wa_auth"
-  ]) {
-    scanLidMappingFiles(fallbackDir);
+  if (process.env.EXTRATOR_AUTH_DIR) {
+    scanLidMappingFiles(process.env.EXTRATOR_AUTH_DIR);
   }
 
   try {
@@ -544,6 +776,22 @@ async function fetchGroupsNow() {
     if (allGroups && typeof allGroups === "object") {
       const rawCount = Object.keys(allGroups).length;
       console.log(`[Bridge] groupFetchAllParticipating retornou ${rawCount} grupos brutos.`);
+
+      // Remove do cache grupos que o usuário já saiu ou foi removido fora deste painel
+      if (rawCount > 0) {
+        let removedStale = 0;
+        for (const existingJid of Object.keys(groupsStore)) {
+          if (!allGroups[existingJid]) {
+            delete groupsStore[existingJid];
+            delete engagementStore[existingJid];
+            removedStale++;
+          }
+        }
+        if (removedStale > 0) {
+          console.log(`[Bridge] Removidos ${removedStale} grupos que não existem mais na conta.`);
+          saveEngagement();
+        }
+      }
 
       for (const [jid, meta] of Object.entries(allGroups)) {
         if (!meta.participants || !Array.isArray(meta.participants)) {
@@ -559,15 +807,16 @@ async function fetchGroupsNow() {
           meta.subject = `Grupo ${rawGid.slice(-6)}`;
         }
 
-        // PROTEÇÃO CONTRA PERDA DE PARTICIPANTES / DADOS:
-        // Se já tínhamos uma contagem de participantes maior no cache, NUNCA sobreescreve por uma lista menor ou com apenas 1 membro!
         const existing = groupsStore[jid];
         if (existing) {
-          if (existing.participants && existing.participants.length > meta.participants.length) {
+          // Só preserva participantes antigos se o WhatsApp retornou stub incompleto (<= 1 membro para grupo maior)
+          if (
+            meta.participants.length <= 1 &&
+            existing.participants &&
+            existing.participants.length > 1 &&
+            (meta.size || 0) > 1
+          ) {
             meta.participants = existing.participants;
-          }
-          if (existing.size && existing.size > (meta.size || 0)) {
-            meta.size = existing.size;
           }
           if (existing.subject && (!meta.subject || meta.subject.startsWith("Grupo "))) {
             meta.subject = existing.subject;
@@ -575,6 +824,9 @@ async function fetchGroupsNow() {
           if (existing.desc && !meta.desc) {
             meta.desc = existing.desc;
           }
+          if (existing.lastAuditedAt) meta.lastAuditedAt = existing.lastAuditedAt;
+          if (existing.isCommunity) meta.isCommunity = existing.isCommunity;
+          if (existing.noMoreParticipants) meta.noMoreParticipants = existing.noMoreParticipants;
         }
 
         meta.size = Math.max(meta.size || 0, meta.participants?.length || 0);
@@ -587,10 +839,12 @@ async function fetchGroupsNow() {
       connectionStatus.lastMessage = `${connectionStatus.groupCount} grupos carregados com sucesso.`;
       saveGroupsCache();
 
-      // Resolve em background grupos que precisam de nome e participantes completos
-      setTimeout(() => {
-        resolveMissingGroupMetadata();
-      }, 300);
+      // Só dispara auditoria automática se já passaram ao menos 30 min desde a última
+      if (Date.now() - lastAutoAuditAt > 1000 * 60 * 30) {
+        setTimeout(() => {
+          resolveMissingGroupMetadata(false);
+        }, 1500);
+      }
     }
   } catch (err) {
     console.error("Erro ao sincronizar grupos:", err.message);
@@ -602,9 +856,34 @@ async function fetchGroupsNow() {
   return groupsStore;
 }
 
+function cleanupSocket() {
+  if (!sock) return;
+  try {
+    sock.ev.removeAllListeners();
+    sock.end(undefined);
+  } catch (e) {}
+  sock = null;
+}
+
+function scheduleReconnect(delayMs) {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    isStarting = false;
+    startWhatsApp();
+  }, delayMs);
+}
+
 async function startWhatsApp() {
   if (isStarting) return;
   isStarting = true;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
 
   try {
     fs.mkdirSync(AUTH_DIR, { recursive: true });
@@ -618,14 +897,7 @@ async function startWhatsApp() {
     connectionStatus.state = "connecting";
     connectionStatus.lastMessage = "Conectando ao WhatsApp...";
 
-    // Limpa instância anterior se houver
-    if (sock) {
-      try {
-        sock.ev.removeAllListeners();
-        sock.end(undefined);
-      } catch (e) {}
-      sock = null;
-    }
+    cleanupSocket();
 
     sock = makeWASocket({
       version,
@@ -722,36 +994,38 @@ async function startWhatsApp() {
         const eg = engagementStore[jid];
         eg.lastActivityAt = m.messageTimestamp ? Number(m.messageTimestamp) * 1000 : Date.now();
 
-        // Radar de Grupos: detecta links de convite enviados nas mensagens
-        const msgText = m.message?.conversation ||
-                        m.message?.extendedTextMessage?.text ||
-                        m.message?.imageMessage?.caption ||
-                        m.message?.videoMessage?.caption || "";
+        // Radar de Grupos: enfileira com rate-limit apenas em mensagens em tempo real
+        if (type === "notify") {
+          const msgText = m.message?.conversation ||
+                          m.message?.extendedTextMessage?.text ||
+                          m.message?.imageMessage?.caption ||
+                          m.message?.videoMessage?.caption || "";
 
-        if (msgText && msgText.includes("chat.whatsapp.com")) {
-          const linkRegex = /chat\.whatsapp\.com\/([A-Za-z0-9_-]{20,24})/gi;
-          let match;
-          while ((match = linkRegex.exec(msgText)) !== null) {
-            const code = match[1];
-            if (!radarStore[code]) {
-              processInviteCode(code, jid, groupsStore[jid]?.subject || "Grupo WhatsApp").catch(() => {});
+          if (msgText && msgText.includes("chat.whatsapp.com")) {
+            const linkRegex = /chat\.whatsapp\.com\/([A-Za-z0-9_-]{20,24})/gi;
+            let match;
+            while ((match = linkRegex.exec(msgText)) !== null) {
+              const code = match[1];
+              if (!radarStore[code]) {
+                enqueueRadarInvite(code, jid, groupsStore[jid]?.subject || "Grupo WhatsApp");
+              }
             }
           }
         }
 
         if (m.key.fromMe) {
-          eg.messagesSentCount = (eg.messagesSentCount || 0) + 1;
           eg.lastMessageSentAt = eg.lastActivityAt;
           const msgId = m.key.id;
           if (!eg.sentMessages) eg.sentMessages = {};
-          if (!eg.sentMessages[msgId]) {
+          if (msgId && !eg.sentMessages[msgId]) {
             eg.sentMessages[msgId] = {
               sentAt: eg.lastMessageSentAt,
               views: 0,
               viewers: [],
             };
+            pruneAndRecalcEngagementEntry(jid, eg);
+            changed = true;
           }
-          changed = true;
         }
       }
       if (changed) saveEngagement();
@@ -761,6 +1035,8 @@ async function startWhatsApp() {
     sock.ev.on("message-receipt.update", (receipts) => {
       if (!Array.isArray(receipts)) return;
       let changed = false;
+      const touchedGroups = new Set();
+
       for (const item of receipts) {
         const jid = item.key?.remoteJid;
         const msgId = item.key?.id;
@@ -780,19 +1056,25 @@ async function startWhatsApp() {
 
         const receiptObj = item.receipt || {};
         const viewer = receiptObj.userJid || item.userJid;
-        if (viewer && !eg.sentMessages[msgId].viewers.includes(viewer)) {
-          eg.sentMessages[msgId].viewers.push(viewer);
-          eg.sentMessages[msgId].views = eg.sentMessages[msgId].viewers.length;
-
-          let totalV = 0;
-          for (const sent of Object.values(eg.sentMessages)) {
-            totalV += sent.views || 0;
+        const viewerDigits = viewer ? cleanDigits(String(viewer)) : "";
+        if (viewerDigits) {
+          const vSet = getViewerSet(jid, msgId, eg.sentMessages[msgId].viewers);
+          if (!vSet.has(viewerDigits)) {
+            vSet.add(viewerDigits);
+            eg.sentMessages[msgId].views = Math.max(eg.sentMessages[msgId].views || 0, vSet.size);
+            eg.sentMessages[msgId].viewers = Array.from(vSet);
+            touchedGroups.add(jid);
+            changed = true;
           }
-          eg.totalViewsCount = totalV;
-          changed = true;
         }
       }
-      if (changed) saveEngagement();
+
+      if (changed) {
+        for (const jid of touchedGroups) {
+          pruneAndRecalcEngagementEntry(jid, engagementStore[jid]);
+        }
+        saveEngagement();
+      }
     });
 
     // Monitora saídas e entradas de participantes em tempo real
@@ -804,8 +1086,10 @@ async function startWhatsApp() {
         const isMe = participants.some((p) => myPhone && p.includes(myPhone));
         if (isMe) {
           delete groupsStore[id];
+          delete engagementStore[id];
           connectionStatus.groupCount = Object.keys(groupsStore).length;
           saveGroupsCache();
+          saveEngagement();
           return;
         }
         groupsStore[id].participants = (groupsStore[id].participants || []).filter(
@@ -838,6 +1122,7 @@ async function startWhatsApp() {
 
       if (connection === "open") {
         isStarting = false;
+        consecutiveDisconnects = 0;
         connectionStatus.state = "connected";
         connectionStatus.qrDataUrl = null;
 
@@ -858,10 +1143,12 @@ async function startWhatsApp() {
           fetchGroupsNow();
         }, 1200);
 
-        // Dispara varredura do Radar de Grupos
-        setTimeout(() => {
-          scanRadarNow();
-        }, 3500);
+        // Varredura automática do Radar no máximo 1x a cada 6 horas (botão manual funciona a qualquer hora)
+        if (Date.now() - lastAutoRadarScanAt > 1000 * 60 * 60 * 6) {
+          setTimeout(() => {
+            scanRadarNow();
+          }, 6000);
+        }
       }
 
       if (connection === "close") {
@@ -872,6 +1159,7 @@ async function startWhatsApp() {
         connectionStatus.state = "disconnected";
         connectionStatus.qrDataUrl = null;
         connectionStatus.lastMessage = `Desconectado: ${reason}`;
+        cleanupSocket();
 
         const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
         const isConflict = statusCode === DisconnectReason.connectionReplaced || statusCode === 440 || (reason && String(reason).toLowerCase().includes("conflict"));
@@ -881,21 +1169,16 @@ async function startWhatsApp() {
           try {
             fs.rmSync(AUTH_DIR, { recursive: true, force: true });
           } catch (e) {}
-          isStarting = false;
-          setTimeout(() => startWhatsApp(), 1500);
+          scheduleReconnect(2000);
         } else if (isConflict) {
-          console.warn("[Bridge] Conflito detectado (440): Outra instância/dispositivo conectou com esta conta. Aguardando 40s para evitar disputa de conexão...");
+          console.warn("[Bridge] Conflito detectado (440): Outra instância/dispositivo conectou com esta conta. Aguardando 45s para evitar disputa de conexão...");
           connectionStatus.lastMessage = "Aviso: Outra conexão ativa com este WhatsApp. Aguardando estabilização...";
-          setTimeout(() => {
-            isStarting = false;
-            startWhatsApp();
-          }, 40000);
+          scheduleReconnect(45000);
         } else {
-          console.log("[Bridge] Reconectando automaticamente em 5 segundos...");
-          setTimeout(() => {
-            isStarting = false;
-            startWhatsApp();
-          }, 5000);
+          consecutiveDisconnects++;
+          const backoffMs = Math.min(60000, 5000 * Math.pow(2, Math.min(consecutiveDisconnects - 1, 3)));
+          console.log(`[Bridge] Reconectando automaticamente em ${Math.round(backoffMs / 1000)} segundos...`);
+          scheduleReconnect(backoffMs);
         }
       }
     });
@@ -1051,6 +1334,8 @@ const server = http.createServer(async (req, res) => {
             await sock.groupLeave(targetJid);
             delete groupsStore[targetJid];
             delete groupsStore[rawId];
+            delete engagementStore[targetJid];
+            delete engagementStore[rawId];
             results.push({ id: rawId, status: "left", ok: true });
           } catch (leaveErr) {
             console.warn(`[Bridge] Aviso ao sair do grupo ${targetJid}:`, leaveErr.message);
@@ -1059,6 +1344,8 @@ const server = http.createServer(async (req, res) => {
             if (errMsg.includes("404") || errMsg.includes("item-not-found") || errMsg.includes("not-authorized")) {
               delete groupsStore[targetJid];
               delete groupsStore[rawId];
+              delete engagementStore[targetJid];
+              delete engagementStore[rawId];
               results.push({ id: rawId, status: "left", ok: true });
             } else {
               // Tenta fallback com apenas os dígitos
@@ -1067,6 +1354,8 @@ const server = http.createServer(async (req, res) => {
                 await sock.groupLeave(altId);
                 delete groupsStore[targetJid];
                 delete groupsStore[rawId];
+                delete engagementStore[targetJid];
+                delete engagementStore[rawId];
                 results.push({ id: rawId, status: "left", ok: true });
               } catch (altErr) {
                 results.push({ id: rawId, status: "error", error: altErr.message, ok: false });
@@ -1077,7 +1366,8 @@ const server = http.createServer(async (req, res) => {
         }
 
         connectionStatus.groupCount = Object.keys(groupsStore).length;
-        saveGroupsCache();
+        saveGroupsCache(true);
+        saveEngagement(true);
 
         const successCount = results.filter((r) => r.ok).length;
         res.end(
@@ -1100,14 +1390,24 @@ const server = http.createServer(async (req, res) => {
   // 5. Logout & Limpeza de Sessão
   if (req.method === "POST" && url.pathname === "/logout") {
     try {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       if (sock) {
-        await sock.logout().catch(() => {});
-        sock.end(undefined);
+        try {
+          sock.ev.removeAllListeners();
+          await sock.logout().catch(() => {});
+          sock.end(undefined);
+        } catch (e) {}
         sock = null;
       }
       fs.rmSync(AUTH_DIR, { recursive: true, force: true });
       groupsStore = {};
-      saveGroupsCache();
+      engagementStore = {};
+      viewerSets.clear();
+      saveGroupsCache(true);
+      saveEngagement(true);
       connectionStatus = {
         state: "disconnected",
         qrDataUrl: null,
@@ -1118,10 +1418,7 @@ const server = http.createServer(async (req, res) => {
         lastError: null,
         lastMessage: "Sessão desconectada.",
       };
-      setTimeout(() => {
-        isStarting = false;
-        startWhatsApp();
-      }, 1000);
+      scheduleReconnect(1000);
       res.end(JSON.stringify({ ok: true, message: "Desconectado com sucesso." }));
     } catch (err) {
       res.statusCode = 500;
@@ -1130,27 +1427,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6. Importar Sessão Ativa
+  // 6. Importar Sessão Ativa (opcional via env EXTRATOR_AUTH_DIR)
   if (req.method === "POST" && url.pathname === "/import-session") {
     try {
-      const candidates = [
-        "/Users/mac/Desktop/CONTATO EXTRATOR /data/wa_auth",
-        "/Users/mac/Desktop/CONTATO EXTRATOR/data/wa_auth"
-      ];
+      const candidates = [process.env.EXTRATOR_AUTH_DIR].filter(Boolean);
       const sourceAuth = candidates.find((d) => fs.existsSync(d));
       if (!sourceAuth) {
         res.statusCode = 404;
-        res.end(JSON.stringify({ ok: false, error: "Nenhuma sessão ativa encontrada no Extrator de Contatos." }));
+        res.end(JSON.stringify({ ok: false, error: "Nenhuma sessão externa configurada para importação. Conecte pelo QR Code." }));
         return;
       }
 
-      if (sock) {
-        try {
-          sock.ev.removeAllListeners();
-          sock.end(undefined);
-        } catch (e) {}
-        sock = null;
-      }
+      cleanupSocket();
 
       fs.rmSync(AUTH_DIR, { recursive: true, force: true });
       fs.mkdirSync(AUTH_DIR, { recursive: true });
@@ -1172,12 +1460,11 @@ const server = http.createServer(async (req, res) => {
 
   // 7. Reconectar
   if (req.method === "POST" && url.pathname === "/reconnect") {
-    try {
-      if (sock) {
-        sock.end(undefined);
-        sock = null;
-      }
-    } catch (e) {}
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    cleanupSocket();
     isStarting = false;
     startWhatsApp();
     res.end(JSON.stringify({ ok: true }));
@@ -1538,10 +1825,21 @@ server.listen(PORT, "127.0.0.1", () => {
   console.log(`[Bridge] WhatsApp Bridge operacional em http://127.0.0.1:${PORT}`);
   startWhatsApp();
 
-  // Watchdog contínuo em background: verifica a cada 5 minutos se há grupos com discrepância de participantes
+  // Watchdog leve em background: verifica a cada 30 minutos apenas grupos realmente pendentes (respeita cooldown de 12h)
   setInterval(() => {
     if (sock && connectionStatus.state === "connected" && !isResolvingMetadata && !isSyncingGroups) {
       resolveMissingGroupMetadata(false);
     }
-  }, 300000);
+  }, 1800000);
 });
+
+function flushAllStoresAndExit() {
+  cleanupSocket();
+  engagementSaver.flushSync();
+  groupsCacheSaver.flushSync();
+  radarSaver.flushSync();
+  process.exit(0);
+}
+
+process.on("SIGINT", flushAllStoresAndExit);
+process.on("SIGTERM", flushAllStoresAndExit);

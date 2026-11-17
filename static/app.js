@@ -26,6 +26,7 @@ const state = {
   groupToLeave: null, // grupo único ou 'bulk'
   activeDetailGroup: null,
   isFetching: false,
+  fetchController: null,
   searchTimer: null,
 
   // Estado do Radar de Grupos
@@ -183,7 +184,11 @@ async function confirmLogout() {
 // ====================================================
 
 async function fetchGroups() {
-  if (state.isFetching) return;
+  if (state.fetchController) {
+    state.fetchController.abort();
+  }
+  const controller = new AbortController();
+  state.fetchController = controller;
   state.isFetching = true;
 
   const refreshIcon = document.getElementById("refreshIcon");
@@ -203,7 +208,7 @@ async function fetchGroups() {
   });
 
   try {
-    const res = await fetch(`/api/groups?${params.toString()}`);
+    const res = await fetch(`/api/groups?${params.toString()}`, { signal: controller.signal });
     const data = await res.json();
 
     if (data.ok) {
@@ -219,10 +224,14 @@ async function fetchGroups() {
       showToast(data.error || "Falha ao carregar grupos", "error");
     }
   } catch (err) {
+    if (err.name === "AbortError") return;
     console.error("Erro fetch groups:", err);
   } finally {
-    state.isFetching = false;
-    if (refreshIcon) refreshIcon.classList.remove("fa-spin");
+    if (state.fetchController === controller) {
+      state.fetchController = null;
+      state.isFetching = false;
+      if (refreshIcon) refreshIcon.classList.remove("fa-spin");
+    }
   }
 }
 
@@ -586,7 +595,8 @@ function renderPagination(totalPages) {
 }
 
 function goToPage(pageNum) {
-  const totalPages = Math.ceil(state.groups.length / (state.perPage === "all" ? state.groups.length : state.perPage));
+  const perPageNum = state.perPage === "all" ? Math.max(1, state.groups.length) : state.perPage;
+  const totalPages = Math.max(1, Math.ceil(state.groups.length / perPageNum));
   if (pageNum < 1 || pageNum > totalPages) return;
   state.currentPage = pageNum;
   renderGroups();
@@ -1324,7 +1334,7 @@ function showGroupDetail(groupId) {
   state.activeDetailGroup = g;
 
   document.getElementById("detailGroupName").textContent = g.subject || "Grupo WhatsApp";
-  document.getElementById("detailGroupMeta").textContent = `${g.total_participants} membros • ID: ${g.id.split("@")[0].slice(-8)}`;
+  document.getElementById("detailGroupMeta").textContent = `${g.total_participants} membros • ID: ${(g.id || "").split("@")[0].slice(-8)}`;
   document.getElementById("detailMembersCount").textContent = g.total_participants;
   document.getElementById("detailSp11Percent").textContent = `${g.sp_capital_percent}%`;
   document.getElementById("detailViewRate").textContent = `${g.view_rate}%`;
@@ -1412,12 +1422,20 @@ function showToast(message, type = "info") {
   const colors = {
     success: "bg-emerald-600 text-white",
     error: "bg-rose-600 text-white",
+    warning: "bg-amber-600 text-white",
     info: "bg-slate-900 text-white"
+  };
+
+  const icons = {
+    success: "fa-circle-check",
+    error: "fa-circle-exclamation",
+    warning: "fa-triangle-exclamation",
+    info: "fa-circle-info"
   };
 
   toast.className = `p-3.5 rounded-xl text-xs font-semibold shadow-lg flex items-center gap-2 pointer-events-auto transform transition-all duration-200 translate-y-2 opacity-0 ${colors[type] || colors.info}`;
   toast.innerHTML = `
-    <i class="fa-solid ${type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'}"></i>
+    <i class="fa-solid ${icons[type] || icons.info}"></i>
     <span>${escapeHtml(message)}</span>
   `;
 
